@@ -1,0 +1,6 @@
+services:
+  wdtextifier:
+    build: .
+    container_name: wdtextifier
+    ports:
+      - "8000:8000"
