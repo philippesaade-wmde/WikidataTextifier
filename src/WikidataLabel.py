@@ -10,7 +10,7 @@ import os
 """
 SQLite database setup for storing Wikidata labels in all languages.
 """
-TOOL_DATA_DIR = os.environ.get("TOOL_DATA_DIR", "./")
+TOOL_DATA_DIR = os.environ.get("TOOL_DATA_DIR", "./data")
 DATABASE_URL = os.path.join(TOOL_DATA_DIR, 'sqlite_wikidata_labels.db')
 
 engine = create_engine(f'sqlite:///{DATABASE_URL}',

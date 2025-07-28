@@ -1,6 +1,8 @@
 services:
   wdtextifier:
     build: .
+    volumes:
+      - ./data:/workspace/data
     container_name: wdtextifier
     ports:
       - "8000:8000"

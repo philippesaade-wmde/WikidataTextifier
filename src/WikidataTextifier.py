@@ -1,6 +1,6 @@
 
-from .WikidataLabel import WikidataLabel, LazyLabelFactory
-from .utils import get_wikidata_entities_by_ids, get_all_missing_labels_ids, get_lang_val, time_to_text, quantity_to_text
+from .WikidataLabel import LazyLabelFactory
+from .utils import get_wikidata_entities_by_ids, get_lang_val
 from datetime import datetime, date
 from dataclasses import dataclass
 import re
@@ -435,6 +435,9 @@ class WikidataEntity:
             raise ValueError(f"ID not found.")
 
         entity_dict = entity_dict[id]
+        if 'labels' not in entity_dict:
+            return None
+
         label = get_lang_val(entity_dict['labels'], lang)
         description = get_lang_val(entity_dict['descriptions'], lang)
 

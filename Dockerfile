@@ -13,4 +13,4 @@ RUN uv sync
 COPY --chmod=755 . .
 
 # Container start script
-CMD [ "uv", "run", "main.py" ]
+CMD ["uv", "run", "gunicorn", "main:app", "-k", "uvicorn.workers.UvicornWorker", "-w", "4", "-b", "0.0.0.0:8000"]

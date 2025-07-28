@@ -1,11 +1,6 @@
-from typing import Annotated
-import time
-import os
-import traceback
-
-# Import necessary types and classes from FastAPI and other libraries.
 from fastapi import FastAPI, Header, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
+import traceback
 
 from src.WikidataTextifier import WikidataEntity
 
@@ -53,26 +48,30 @@ app.add_middleware(
 )
 async def property_query_route(
     request: Request,
-    id: str = Query(..., example="Q42"),
+    id: str = Query(..., examples="Q42"),
     lang: str = 'en',
-    json: bool = True,
+    json: bool = False,
 ):
     """
     Retrieve a Wikidata item with all labels or textual representations for an LLM.
 
     Args:
         id (str): The Wikidata item ID (e.g., "Q42").
-        json (bool): If True, returns the item in JSON format. Defaults to True.
+        json (bool): If True, returns the item in JSON format.
 
     Returns:
         list: A list of dictionaries containing QIDs and the similarity scores.
     """
     if not id:
         response = "ID is missing"
-        raise HTTPException(status_code=422, detail=response)
+        return HTTPException(status_code=422, detail=response)
 
     try:
         entity = WikidataEntity.from_id(id, lang=lang)
+
+        if not entity:
+            response = "Item not found"
+            return HTTPException(status_code=404, detail=response)
 
         if json:
             results = entity.to_json()
