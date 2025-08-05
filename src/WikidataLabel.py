@@ -2,6 +2,9 @@ from sqlalchemy import Column, Text, create_engine, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.types import TypeDecorator
+
+from .utils import get_lang_val
+
 from datetime import datetime, timedelta
 import json
 import requests
@@ -164,7 +167,6 @@ class WikidataLabel(Base):
         # Fallback when labels are missing from the database
         missing_ids = set(ids) - set(labels.keys())
         if missing_ids:
-            print(f"Missing IDs: {missing_ids}")
             missing_labels = WikidataLabel._get_labels_wdapi(missing_ids)
             labels.update(missing_labels)
 
@@ -267,10 +269,8 @@ class LazyLabelFactory:
 
     def get_label(self, qid: str) -> str:
         label_dict = self._resolved_labels.get(qid, {})
-        label = label_dict.get(self.lang) or label_dict.get('mul') or ''
-        if isinstance(label, dict):
-            return label.get('value', '')
-        return label or ''
+        label = get_lang_val(label_dict, lang=self.lang)
+        return label
 
     def set_lang(self, lang: str):
         self.lang = lang

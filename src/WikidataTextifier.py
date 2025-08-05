@@ -253,7 +253,11 @@ class WikidataClaimValue:
     @classmethod
     def from_raw(cls, claim, value, qualifiers, lazylabel):
         if value.get('value') is None:
-            parsed_value = None
+            return cls(
+                claim=claim,
+                value=None,
+                qualifiers=[]
+            )
         elif value.get('type') == 'wikibase-entityid':
             parsed_value = WikidataEntity(
                 id=value['value']['id'],
@@ -306,14 +310,20 @@ class WikidataClaimValue:
         )
 
     def __str__(self):
+        if not self:
+            return ''
+
         string = str(self.value)
-        attributes = [str(q) for q in self.qualifiers if str(q) != '']
+        attributes = [str(q) for q in self.qualifiers if q]
         if len(attributes) > 0:
             string += f" ({', '.join(attributes)})"
         return string
 
+    def __bool__(self):
+        return (self.value is not None) and str(self.value) != ''
+
     def to_json(self):
-        if self.value is None:
+        if not self:
             return None
 
         value = self.value.to_json()
@@ -324,10 +334,15 @@ class WikidataClaimValue:
                 'label': value['label']
             }
 
+        qualifiers = [q.to_json() for q in self.qualifiers if q]
+        if len(qualifiers) == 0:
+            return {
+                "value": value
+            }
+
         return {
             "value": value,
-            "qualifiers": [q.to_json() for q in self.qualifiers \
-                           if q is not None]
+            "qualifiers": [q.to_json() for q in self.qualifiers if q]
         }
 
 
@@ -339,13 +354,23 @@ class WikidataClaim:
     datatype: str
 
     @classmethod
-    def from_raw(cls, subject, property, claim, lazylabel):
+    def from_raw(cls, subject, property, claim, lazylabel, external_ids=True):
         if not claim:
             return cls(
                 subject=subject,
                 property=property,
                 values=[],
                 datatype='empty'
+            )
+
+        datatype = claim[0].get('mainsnak', claim[0])\
+                            .get('datatype', {})
+        if not external_ids and datatype == 'external-id':
+            return cls(
+                subject=subject,
+                property=property,
+                values=[],
+                datatype=datatype
             )
 
         rank_preferred_found = False
@@ -369,8 +394,6 @@ class WikidataClaim:
             claim[i]['include'] = rank_normal_condition or \
                                   rank_preferred_condition
 
-        datatype = claim[0].get('mainsnak', claim[0])\
-                            .get('datatype', {})
         values = [
             WikidataClaimValue.from_raw(
                 claim=None,
@@ -394,19 +417,22 @@ class WikidataClaim:
 
 
     def __str__(self):
-        if str(self.property.label) == '':
+        if not self:
             return ''
 
-        if len(self.values) == 0:
-            values = "no value"
-        else:
-            values = [str(val) for val in self.values if str(val) != '']
-            values = ", ".join(values)
-
-        if values == '':
+        if not str(self.property.label):
             return ''
+
+        values = [str(v) for v in self.values if v]
+        values = ", ".join(values)
 
         return f"{str(self.property.label)}: {values}"
+
+    def __bool__(self):
+        return (self.property is not None) and \
+                str(self.property) != '' and \
+                    (len(self.values) > 0) and \
+                        any(bool(val) for val in self.values)
 
     def to_json(self):
         property = self.property.to_json()
@@ -414,8 +440,7 @@ class WikidataClaim:
             "PID": property['QID'],
             "property_label": property['label'],
             "datatype": self.datatype,
-            "values": [v.to_json() for v in self.values \
-                        if v is not None]
+            "values": [v.to_json() for v in self.values if v]
         }
 
 
@@ -429,7 +454,7 @@ class WikidataEntity:
     claims: list[WikidataClaim]
 
     @classmethod
-    def from_id(cls, id: str, lang: str = 'en'):
+    def from_id(cls, id: str, lang: str = 'en', external_ids: bool = True):
         entity_dict = get_wikidata_entities_by_ids(id)
         if id not in entity_dict:
             raise ValueError(f"ID not found.")
@@ -459,7 +484,8 @@ class WikidataEntity:
                     claims=[]
                 ),
                 claim=claim,
-                lazylabel=lazylabel
+                lazylabel=lazylabel,
+                external_ids=external_ids
             ) for pid, claim in entity_dict.get('claims', {}).items()
         ]
 
@@ -492,7 +518,7 @@ class WikidataEntity:
         if self.aliases:
             string += f", also known as {', '.join(map(str, self.aliases))}"
 
-        attributes = [str(c) for c in self.claims if str(c) != '']
+        attributes = [str(c) for c in self.claims if c]
         if len(attributes) > 0:
             attributes = "\n- ".join(attributes)
             string += f". Attributes:\n- {attributes}"
@@ -501,12 +527,16 @@ class WikidataEntity:
 
         return string
 
+    def __bool__(self):
+        return (self.id is not None) and \
+               (self.label is not None) and \
+               (str(self.label) != '')
+
     def to_json(self):
         return {
             'QID': self.id,
             'label': str(self.label),
             'description': self.description,
             'aliases': self.aliases,
-            'claims': [c.to_json() for c in self.claims \
-                       if c is not None]
+            'claims': [c.to_json() for c in self.claims if c]
         }
