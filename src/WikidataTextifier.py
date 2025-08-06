@@ -314,9 +314,9 @@ class WikidataClaimValue:
             return ''
 
         string = str(self.value)
-        attributes = [str(q) for q in self.qualifiers if q]
-        if len(attributes) > 0:
-            string += f" ({', '.join(attributes)})"
+        qualifiers = [str(q) for q in self.qualifiers if q]
+        if len(qualifiers) > 0:
+            string += f" ({', '.join(qualifiers)})"
         return string
 
     def __bool__(self):
@@ -344,6 +344,19 @@ class WikidataClaimValue:
             "value": value,
             "qualifiers": [q.to_json() for q in self.qualifiers if q]
         }
+
+    def to_triplet(self):
+        if not self:
+            return ''
+
+        string = str(self.value)
+        if isinstance(self.value, WikidataEntity):
+            string = f"{self.value.label} ({self.value.id})"
+
+        qualifiers = [q.to_triplet() for q in self.qualifiers if q]
+        if len(qualifiers) > 0:
+            string += f" | {' | '.join(qualifiers)})"
+        return string
 
 
 @dataclass
@@ -420,9 +433,6 @@ class WikidataClaim:
         if not self:
             return ''
 
-        if not str(self.property.label):
-            return ''
-
         values = [str(v) for v in self.values if v]
         values = ", ".join(values)
 
@@ -430,7 +440,7 @@ class WikidataClaim:
 
     def __bool__(self):
         return (self.property is not None) and \
-                str(self.property) != '' and \
+                str(self.property.label) != '' and \
                     (len(self.values) > 0) and \
                         any(bool(val) for val in self.values)
 
@@ -442,6 +452,20 @@ class WikidataClaim:
             "datatype": self.datatype,
             "values": [v.to_json() for v in self.values if v]
         }
+
+    def to_triplet(self):
+        if not self:
+            return ''
+
+        label = f"{str(self.property.label)} ({self.property.id})"
+        values = [v.to_triplet() for v in self.values if v]
+
+        if len(values) > 0:
+            values = [f"{label}: {v}" for v in values]
+            values = "\n".join(values)
+            return values
+
+        return ''
 
 
 @dataclass
@@ -540,3 +564,15 @@ class WikidataEntity:
             'aliases': self.aliases,
             'claims': [c.to_json() for c in self.claims if c]
         }
+
+    def to_triplet(self):
+        label = f"{str(self.label)} ({self.id})"
+        attributes = [c.to_triplet() for c in self.claims if c]
+
+        if len(attributes) > 0:
+            attributes = "\n".join(attributes).split("\n")
+            attributes = [f"{label}: {a}" for a in attributes]
+            attributes = "\n".join(attributes)
+            return attributes
+
+        return label

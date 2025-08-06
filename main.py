@@ -40,7 +40,7 @@ app.add_middleware(
             "description": "Missing or invalid query parameter",
             "content": {
                 "application/json": {
-                    "example": {"detail": "ID is missing"}
+                    "example": {"detail": "Invalid format specified"}
                 }
             },
         },
@@ -50,7 +50,7 @@ async def property_query_route(
     request: Request,
     id: str = Query(..., examples="Q42"),
     lang: str = 'en',
-    json: bool = False,
+    format: str = 'json',
     external_ids: bool = True
 ):
     """
@@ -58,7 +58,7 @@ async def property_query_route(
 
     Args:
         id (str): The Wikidata item ID (e.g., "Q42").
-        json (bool): If True, returns the item in JSON format.
+        format (str): The format of the response, either 'json', 'text', or 'triplet'.
         lang (str): The language code for labels (default is 'en').
         external_ids (bool): If True, includes external IDs in the response.
 
@@ -80,10 +80,15 @@ async def property_query_route(
             response = "Item not found"
             return HTTPException(status_code=404, detail=response)
 
-        if json:
+        if format == 'json':
             results = entity.to_json()
-        else:
+        elif format == 'triplet':
+            results = entity.to_triplet()
+        elif format == 'text':
             results = str(entity)
+        else:
+            response = "Invalid format specified"
+            return HTTPException(status_code=422, detail=response)
 
         return results
     except Exception as e:
