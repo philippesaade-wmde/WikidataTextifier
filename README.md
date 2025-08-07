@@ -36,3 +36,43 @@
 | `lang`         | string  | No       | Language code for labels (default: `en`)                                   |
 | `format`         | string    | No       | The format of the response, either 'json', 'text', or 'triplet' (default: `json`) |
 | `external_ids` | bool    | No       | Whether to include external IDs in the output (default: `true`)            |
+
+---
+
+## Deploy to Toolforge
+
+1. Shell into the Toolforge system:
+
+```bash
+ssh [UNIX shell username]@login.toolforge.org
+```
+
+2. Switch to tool user account:
+
+```bash
+become wd-textify
+```
+
+3. Build from Git:
+
+```bash
+toolforge build start https://github.com/philippesaade-wmde/WikidataTextifier.git
+```
+
+4. Start the web service:
+
+```bash
+webservice buildservice start --mount all
+```
+
+5. Debugging the web service:
+
+Read the logs:
+```bash
+webservice logs
+```
+
+Open the service shell:
+```bash
+webservice shell
+```
