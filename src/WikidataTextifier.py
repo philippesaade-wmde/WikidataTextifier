@@ -259,14 +259,21 @@ class WikidataClaimValue:
                 qualifiers=[]
             )
         elif value.get('type') == 'wikibase-entityid':
-            parsed_value = WikidataEntity(
-                id=value['value']['id'],
-                label=lazylabel.create(value['value']['id']),
-                description=None,
-                aliases=[],
-                instanceof=[],
-                claims=[]
-            )
+            id = value['value']['id']
+            if id.startswith('P') or id.startswith('Q'):
+                parsed_value = WikidataEntity(
+                    id=id,
+                    label=lazylabel.create(id),
+                    description=None,
+                    aliases=[],
+                    instanceof=[],
+                    claims=[]
+                )
+            else:
+                parsed_value = WikidataText.from_raw(
+                    id, lazylabel
+                )
+
         elif value.get('type') == 'quantity':
             parsed_value = WikidataQuantity.from_raw(
                 value['value'], lazylabel
