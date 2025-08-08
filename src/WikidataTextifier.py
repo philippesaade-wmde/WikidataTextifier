@@ -234,14 +234,16 @@ class WikidataQuantity:
         )
 
     def __str__(self):
-        return f"{self.amount} {self.unit or ''}".strip()
+        return f"{self.amount} {str(self.unit) or ''}".strip()
 
     def to_json(self):
-        return {
-            'amount': self.amount,
-            'unit': self.unit,
-            'unit_QID': self.unit_id
-        }
+        if self.unit_id:
+            return {
+                'amount': self.amount,
+                'unit': str(self.unit),
+                'unit_QID': self.unit_id
+            }
+        return self.amount
 
 
 @dataclass
@@ -338,7 +340,7 @@ class WikidataClaimValue:
             ID_name = "QID" if self.claim.datatype == 'wikibase-item' else "PID"
             value = {
                 ID_name: value['QID'],
-                'label': value['label']
+                'label': str(value['label'])
             }
 
         qualifiers = [q.to_json() for q in self.qualifiers if q]
@@ -358,7 +360,7 @@ class WikidataClaimValue:
 
         string = str(self.value)
         if isinstance(self.value, WikidataEntity):
-            string = f"{self.value.label} ({self.value.id})"
+            string = f"{str(self.value.label)} ({self.value.id})"
 
         qualifiers = [q.to_triplet() for q in self.qualifiers if q]
         if len(qualifiers) > 0:
