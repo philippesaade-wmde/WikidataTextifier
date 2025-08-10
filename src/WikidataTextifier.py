@@ -523,6 +523,7 @@ class WikidataEntity:
         ]
 
         instanceofclaim = [c for c in claims if c.property.id == 'P31']
+        instanceof = []
         if len(instanceofclaim) > 0:
             instanceof = [val.value for val in instanceofclaim[0].values]
 
