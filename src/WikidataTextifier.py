@@ -268,7 +268,6 @@ class WikidataClaimValue:
                     label=lazylabel.create(id),
                     description=None,
                     aliases=[],
-                    instanceof=[],
                     claims=[]
                 )
             else:
@@ -304,7 +303,6 @@ class WikidataClaimValue:
                         label=lazylabel.create(pid),
                         description=None,
                         aliases=[],
-                        instanceof=[],
                         claims=[]
                     ),
                     claim=qualifier,
@@ -483,7 +481,6 @@ class WikidataEntity:
     label: str | None
     description: str | None
     aliases: list[str]
-    instanceof: list["WikidataEntity"]
     claims: list[WikidataClaim]
 
     @classmethod
@@ -513,7 +510,6 @@ class WikidataEntity:
                     label=lazylabel.create(pid),
                     description=None,
                     aliases=[],
-                    instanceof=[],
                     claims=[]
                 ),
                 claim=claim,
@@ -522,17 +518,11 @@ class WikidataEntity:
             ) for pid, claim in entity_dict.get('claims', {}).items()
         ]
 
-        instanceofclaim = [c for c in claims if c.property.id == 'P31']
-        instanceof = []
-        if len(instanceofclaim) > 0:
-            instanceof = [val.value for val in instanceofclaim[0].values]
-
         entity = cls(
             id=id,
             label=label,
             description=description,
             aliases=aliases,
-            instanceof=instanceof,
             claims=claims
         )
 
@@ -545,8 +535,6 @@ class WikidataEntity:
         label_str = str(self.label)
         string = label_str
 
-        if self.instanceof:
-            string += f" ({', '.join(map(str, self.instanceof))})"
         if self.description:
             string += f", {self.description}"
         if self.aliases:
