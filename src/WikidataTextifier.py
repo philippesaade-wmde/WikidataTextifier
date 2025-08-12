@@ -1,6 +1,6 @@
 
-from .WikidataLabel import LazyLabelFactory
-from .utils import get_wikidata_entities_by_ids, get_lang_val
+from .WikidataLabel import WikidataLabel, LazyLabelFactory
+from .utils import get_wikidata_entities_by_ids, wikidata_time_to_text, wikidata_geolocation_to_text
 from datetime import datetime, date
 from dataclasses import dataclass
 import re
@@ -49,56 +49,36 @@ class WikidataText:
 class WikidataCoordinates:
     latitude: float | None = None
     longitude: float | None = None
+    string_val: str | None = None
 
     @classmethod
     def from_raw(cls, value, lazylabel):
         if not isinstance(value, dict):
             return cls(
-                time=None,
-                precision=None,
-                calendarmodel=None
+                latitude=None,
+                longitude=None,
+                string_val=None
             )
+
+        string_val = wikidata_geolocation_to_text(
+            value.get('latitude'),
+            value.get('longitude')
+        )
 
         return cls(
             latitude=value.get('latitude'),
-            longitude=value.get('longitude')
+            longitude=value.get('longitude'),
+            string_val=string_val
         )
 
     def __str__(self):
-        latitude = abs(self.latitude)
-        hemi = 'N' if self.latitude >= 0 else 'S'
-
-        degrees = int(latitude)
-        minutes_full = (latitude - degrees) * 60
-        minutes = int(minutes_full)
-        seconds = (minutes_full - minutes) * 60
-
-        # Round to-tenth of a second, drop trailing .0
-        seconds = round(seconds, 1)
-        seconds_str = f"{seconds}".rstrip("0").rstrip(".")
-
-        lat_str = f"{degrees}°{minutes}'{seconds_str}\"{hemi}"
-
-        longitude = abs(self.longitude)
-        hemi = 'E' if self.longitude >= 0 else 'W'
-
-        degrees = int(longitude)
-        minutes_full = (longitude - degrees) * 60
-        minutes = int(minutes_full)
-        seconds = (minutes_full - minutes) * 60
-
-        # Round to-tenth of a second, drop trailing .0
-        seconds = round(seconds, 1)
-        seconds_str = f"{seconds}".rstrip("0").rstrip(".")
-
-        lon_str = f"{degrees}°{minutes}'{seconds_str}\"{hemi}"
-
-        return f'{lat_str}, {lon_str}'
+        return self.string_val or ''
 
     def to_json(self):
         return {
             'latitude': self.latitude,
-            'longitude': self.longitude
+            'longitude': self.longitude,
+            'string': self.string_val
         }
 
 @dataclass
@@ -106,6 +86,7 @@ class WikidataTime:
     time: str | None = None
     precision: int | None = None
     calendarmodel: str | None = None
+    string_val: str | None = None
 
     @classmethod
     def from_raw(cls, value, lazylabel):
@@ -113,95 +94,31 @@ class WikidataTime:
             return cls(
                 time=None,
                 precision=None,
-                calendarmodel=None
+                calendarmodel=None,
+                string_val=None
             )
 
         calendarmodel = value.get('calendarmodel', 'Q1985786')
         calendarmodel = calendarmodel.split('/')[-1]
+
+        string_val = wikidata_time_to_text(value, lazylabel.lang)
+
         return cls(
             time=value.get('time'),
             precision=value.get('precision'),
-            calendarmodel=calendarmodel
+            calendarmodel=calendarmodel,
+            string_val=string_val
         )
 
     def __str__(self):
-        # Use regex to parse the time string
-        pattern = r'([+-])(\d{1,16})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})Z'
-        match = re.match(pattern, self.time)
-
-        if not match:
-            raise ValueError("Malformed time string")
-
-        sign, year_str, month_str, day_str, hour_str, minute_str, second_str = match.groups()
-        year = int(year_str) * (1 if sign == '+' else -1)
-
-        # Convert Julian to Gregorian if necessary
-        if 'Q1985786' in self.calendarmodel and year > 1 and len(str(abs(year))) <= 4:  # Julian calendar
-            try:
-                month = 1 if month_str == '00' else int(month_str)
-                day = 1 if day_str == '00' else int(day_str)
-                julian_date = date(year, month, day)
-                gregorian_ordinal = julian_date.toordinal() + (datetime(1582, 10, 15).toordinal() - datetime(1582, 10, 5).toordinal())
-                gregorian_date = date.fromordinal(gregorian_ordinal)
-                year, month, day = gregorian_date.year, gregorian_date.month, gregorian_date.day
-            except ValueError:
-                raise ValueError("Invalid date for Julian calendar")
-        else:
-            month = int(month_str) if month_str != '00' else 1
-            day = int(day_str) if day_str != '00' else 1
-
-        # Next step: take translations from Wikidata Labels
-        months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-        month_str = months[month - 1] if month != 0 else ''
-        era = 'AD' if year > 0 else 'BC'
-
-        if self.precision == 14:
-            return f"{year} {month_str} {day} {hour_str}:{minute_str}:{second_str}"
-        elif self.precision == 13:
-            return f"{year} {month_str} {day} {hour_str}:{minute_str}"
-        elif self.precision == 12:
-            return f"{year} {month_str} {day} {hour_str}:00"
-        elif self.precision == 11:
-            return f"{day} {month_str} {year}"
-        elif self.precision == 10:
-            return f"{month_str} {year}"
-        elif self.precision == 9:
-            return f"{abs(year)} {era}"
-        elif self.precision == 8:
-            decade = (year // 10) * 10
-            return f"{abs(decade)}s {era}"
-        elif self.precision == 7:
-            century = (abs(year) - 1) // 100 + 1
-            return f"{century}th century {era}"
-        elif self.precision == 6:
-            millennium = (abs(year) - 1) // 1000 + 1
-            return f"{millennium}th millennium {era}"
-        elif self.precision == 5:
-            tens_of_thousands = abs(year) // 10000
-            return f"{tens_of_thousands} ten thousand years {era}"
-        elif self.precision == 4:
-            hundreds_of_thousands = abs(year) // 100000
-            return f"{hundreds_of_thousands} hundred thousand years {era}"
-        elif self.precision == 3:
-            millions = abs(year) // 1000000
-            return f"{millions} million years {era}"
-        elif self.precision == 2:
-            tens_of_millions = abs(year) // 10000000
-            return f"{tens_of_millions} tens of millions of years {era}"
-        elif self.precision == 1:
-            hundreds_of_millions = abs(year) // 100000000
-            return f"{hundreds_of_millions} hundred million years {era}"
-        elif self.precision == 0:
-            billions = abs(year) // 1000000000
-            return f"{billions} billion years {era}"
-        else:
-            raise ValueError(f"Unknown precision value {self.precision}")
+        return self.string_val or ''
 
     def to_json(self):
         return {
             'time': self.time,
             'precision': self.precision,
-            'calendar_QID': self.calendarmodel
+            'calendar_QID': self.calendarmodel,
+            'string': self.string_val
         }
 
 @dataclass
@@ -493,8 +410,8 @@ class WikidataEntity:
         if 'labels' not in entity_dict:
             return None
 
-        label = get_lang_val(entity_dict['labels'], lang)
-        description = get_lang_val(entity_dict['descriptions'], lang)
+        label = WikidataLabel.get_lang_val(entity_dict['labels'], lang)
+        description = WikidataLabel.get_lang_val(entity_dict['descriptions'], lang)
 
         aliases = entity_dict['aliases'].get(lang, []) + \
                         entity_dict['aliases'].get('mul', [])

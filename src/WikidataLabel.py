@@ -3,8 +3,6 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.types import TypeDecorator
 
-from .utils import get_lang_val
-
 from datetime import datetime, timedelta
 import json
 import requests
@@ -241,6 +239,19 @@ class WikidataLabel(Base):
             }
         return new_labels
 
+    @staticmethod
+    def get_lang_val(data, lang='en', fallback_lang=None):
+        """
+        Extracts the value for a given language from a dictionary of labels.
+        """
+        label = data.get(lang, data.get('mul', {}))
+        if fallback_lang and not label:
+            label = data.get(fallback_lang, {})
+
+        if isinstance(label, str):
+            return label
+        return label.get('value', '')
+
 class LazyLabel:
     def __init__(self, qid, factory):
         self.qid = qid
@@ -269,7 +280,7 @@ class LazyLabelFactory:
 
     def get_label(self, qid: str) -> str:
         label_dict = self._resolved_labels.get(qid, {})
-        label = get_lang_val(label_dict, lang=self.lang)
+        label = WikidataLabel.get_lang_val(label_dict, lang=self.lang)
         return label
 
     def set_lang(self, lang: str):
