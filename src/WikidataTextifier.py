@@ -151,7 +151,9 @@ class WikidataQuantity:
         )
 
     def __str__(self):
-        return f"{self.amount} {str(self.unit) or ''}".strip()
+        if self.unit_id:
+            return f"{self.amount} {str(self.unit)}"
+        return self.amount
 
     def to_json(self):
         if self.unit_id:
@@ -167,15 +169,19 @@ class WikidataQuantity:
 class WikidataClaimValue:
     claim: "WikidataClaim"
     value: "WikidataEntity | WikidataQuantity | WikidataTime | WikidataCoordinates | WikidataText | None"
-    qualifiers: list["WikidataClaim"]
+    qualifiers: list["WikidataClaim"] | None
+    references: list[list["WikidataClaim"]] | None
+    rank: str | None # 'preferred', 'normal', 'deprecated'
 
     @classmethod
-    def from_raw(cls, claim, value, qualifiers, lazylabel):
+    def from_raw(cls, claim, value, qualifiers, references, rank, lazylabel):
         if value.get('value') is None:
             return cls(
                 claim=claim,
                 value=None,
-                qualifiers=[]
+                qualifiers=None,
+                references=None,
+                rank=rank
             )
         elif value.get('type') == 'wikibase-entityid':
             id = value['value']['id']
@@ -227,10 +233,34 @@ class WikidataClaimValue:
                 )
             )
 
+        # Setup the references
+        parsed_references = []
+        for reference in references:
+            reference_claims = reference.get('snaks', {})
+            parsed_references_sublist = []
+            for pid, reference_claim in reference_claims.items():
+                parsed_references_sublist.append(
+                    WikidataClaim.from_raw(
+                        subject=None,
+                        property=WikidataEntity(
+                            id=pid,
+                            label=lazylabel.create(pid),
+                            description=None,
+                            aliases=[],
+                            claims=[]
+                        ),
+                        claim=reference_claim,
+                        lazylabel=lazylabel
+                    )
+                )
+            parsed_references.append(parsed_references_sublist)
+
         return cls(
             claim=claim,
             value=parsed_value,
-            qualifiers=parsed_qualifiers
+            qualifiers=parsed_qualifiers,
+            references=parsed_references,
+            rank=rank
         )
 
     def __str__(self):
@@ -239,8 +269,13 @@ class WikidataClaimValue:
 
         string = str(self.value)
         qualifiers = [str(q) for q in self.qualifiers if q]
+
+        if self.rank == 'deprecated':
+            string += " [deprecated]"
+
         if len(qualifiers) > 0:
             string += f" ({', '.join(qualifiers)})"
+
         return string
 
     def __bool__(self):
@@ -258,16 +293,23 @@ class WikidataClaimValue:
                 'label': str(value['label'])
             }
 
-        qualifiers = [q.to_json() for q in self.qualifiers if q]
-        if len(qualifiers) == 0:
-            return {
-                "value": value
-            }
-
-        return {
-            "value": value,
-            "qualifiers": [q.to_json() for q in self.qualifiers if q]
+        return_dict = {
+            "value": value
         }
+
+        if self.qualifiers:
+            qualifiers = [q.to_json() for q in self.qualifiers if q]
+            return_dict["qualifiers"] = qualifiers
+
+        if self.references:
+            references = [[r.to_json() for r in ref if r] \
+                        for ref in self.references]
+            return_dict["references"] = references
+
+        if self.rank:
+            return_dict["rank"] = self.rank
+
+        return return_dict
 
     def to_triplet(self):
         if not self:
@@ -276,6 +318,9 @@ class WikidataClaimValue:
         string = str(self.value)
         if isinstance(self.value, WikidataEntity):
             string = f"{str(self.value.label)} ({self.value.id})"
+
+        if self.rank == 'deprecated':
+            string += " [deprecated]"
 
         qualifiers = [q.to_triplet() for q in self.qualifiers if q]
         if len(qualifiers) > 0:
@@ -291,7 +336,8 @@ class WikidataClaim:
     datatype: str
 
     @classmethod
-    def from_raw(cls, subject, property, claim, lazylabel, external_ids=True):
+    def from_raw(cls, subject, property, claim, lazylabel,
+                 external_ids=True, references=False, all_ranks=False):
         if not claim:
             return cls(
                 subject=subject,
@@ -319,24 +365,35 @@ class WikidataClaim:
 
         # Include only rank preferred claims or rank normal if preferred is not found.
         for i in range(len(claim)):
-            if 'rank' not in claim[i]:
-                claim[i]['rank'] = 'normal'
 
-            is_rank_normal = (claim[i].get('rank') == 'normal')
-            is_rank_preferred = (claim[i].get('rank') == 'preferred')
-            rank_normal_condition = is_rank_normal and \
-                                    (not rank_preferred_found)
-            rank_preferred_condition = is_rank_preferred and \
-                                    rank_preferred_found
-            claim[i]['include'] = rank_normal_condition or \
-                                  rank_preferred_condition
+            if 'rank' not in claim[i]:
+                # For qualifiers and references, rank is not defined
+                claim[i]['rank'] = None
+                claim[i]['include'] = True
+
+            else:
+                # Skip the filtering if all ranks are requested
+                if all_ranks:
+                    claim[i]['include'] = True
+                    continue
+
+                is_rank_normal = (claim[i].get('rank') == 'normal')
+                is_rank_preferred = (claim[i].get('rank') == 'preferred')
+                rank_normal_condition = is_rank_normal and \
+                                        (not rank_preferred_found)
+                rank_preferred_condition = is_rank_preferred and \
+                                        rank_preferred_found
+                claim[i]['include'] = rank_normal_condition or \
+                                    rank_preferred_condition
 
         values = [
             WikidataClaimValue.from_raw(
                 claim=None,
                 value=value.get('datavalue', {}),
                 qualifiers=value.get('qualifiers', {}),
-                lazylabel=lazylabel
+                references=value.get('references', []) if references else [],
+                lazylabel=lazylabel,
+                rank=value.get('rank', None)
             ) for value in claim if value['include']
         ]
 
@@ -401,7 +458,13 @@ class WikidataEntity:
     claims: list[WikidataClaim]
 
     @classmethod
-    def from_id(cls, id: str, lang: str = 'en', external_ids: bool = True):
+    def from_id(cls, id: str,
+                lang: str = 'en',
+                external_ids: bool = True,
+                all_ranks: bool = False,
+                references: bool = False,
+                filter_pids: list[str] | None = None):
+
         entity_dict = get_wikidata_entities_by_ids(id)
         if id not in entity_dict:
             raise ValueError(f"ID not found.")
@@ -419,6 +482,11 @@ class WikidataEntity:
 
         lazylabel = LazyLabelFactory(lang=lang)
 
+        claims = entity_dict.get('claims', {})
+        if filter_pids:
+            claims = {pid: claim for pid, claim in claims.items() \
+                      if pid in filter_pids}
+
         claims = [
             WikidataClaim.from_raw(
                 subject=None,
@@ -431,8 +499,10 @@ class WikidataEntity:
                 ),
                 claim=claim,
                 lazylabel=lazylabel,
-                external_ids=external_ids
-            ) for pid, claim in entity_dict.get('claims', {}).items()
+                external_ids=external_ids,
+                references=references,
+                all_ranks=all_ranks
+            ) for pid, claim in claims.items()
         ]
 
         entity = cls(

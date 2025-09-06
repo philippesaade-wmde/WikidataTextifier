@@ -49,18 +49,24 @@ app.add_middleware(
 async def property_query_route(
     request: Request,
     id: str = Query(..., examples="Q42"),
+    pid: str = Query(None, examples="P31,P279"),
     lang: str = 'en',
     format: str = 'json',
-    external_ids: bool = True
+    external_ids: bool = True,
+    references: bool = False,
+    all_ranks: bool = False
 ):
     """
     Retrieve a Wikidata item with all labels or textual representations for an LLM.
 
     Args:
         id (str): The Wikidata item ID (e.g., "Q42").
+        pid (str): Comma-separated list of property IDs to filter claims (e.g., "P31,P279").
         format (str): The format of the response, either 'json', 'text', or 'triplet'.
         lang (str): The language code for labels (default is 'en').
         external_ids (bool): If True, includes external IDs in the response.
+        all_ranks (bool): If True, includes statements of all ranks (preferred, normal, deprecated).
+        references (bool): If True, includes references in the response. (only available in JSON format)
 
     Returns:
         list: A list of dictionaries containing QIDs and the similarity scores.
@@ -70,10 +76,17 @@ async def property_query_route(
         return HTTPException(status_code=422, detail=response)
 
     try:
+        filter_pids = None
+        if pid:
+            filter_pids = [p.strip() for p in pid.split(',')]
+
         entity = WikidataEntity.from_id(
             id,
             lang=lang,
-            external_ids=external_ids
+            external_ids=external_ids,
+            all_ranks=all_ranks,
+            references=references,
+            filter_pids=filter_pids
         )
 
         if not entity:
