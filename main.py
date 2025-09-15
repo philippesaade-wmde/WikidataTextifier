@@ -1,8 +1,10 @@
 from fastapi import FastAPI, Header, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi import BackgroundTasks
 import traceback
 
 from src.WikidataTextifier import WikidataEntity
+from src.WikidataLabel import WikidataLabel
 
 # Start Fastapi app
 app = FastAPI(
@@ -46,8 +48,8 @@ app.add_middleware(
         },
     },
 )
-async def property_query_route(
-    request: Request,
+async def get_labels(
+    request: Request, background_tasks: BackgroundTasks,
     id: str = Query(..., examples="Q42"),
     pid: str = Query(None, examples="P31,P279"),
     lang: str = 'en',
@@ -103,6 +105,7 @@ async def property_query_route(
             response = "Invalid format specified"
             return HTTPException(status_code=422, detail=response)
 
+        background_tasks.add_task(WikidataLabel.delete_old_labels)
         return results
     except Exception as e:
         traceback.print_exc()

@@ -176,6 +176,48 @@ class WikidataLabel(Base):
         return labels
 
     @staticmethod
+    def delete_old_labels():
+        """
+        Delete labels older than 90 days.
+        If the database exceeds 10 million rows, delete the oldest rows until it is below the threshold.
+        """
+        with Session() as session:
+            try:
+                # Step 1: Delete labels older than 90 days
+                date_limit = (datetime.now() - timedelta(days=90)).strftime('%Y-%m-%d %H:%M:%S')
+                session.execute(
+                    text("DELETE FROM labels WHERE date_added < :date_limit"),
+                    {"date_limit": date_limit}
+                )
+                session.commit()
+
+                # Step 2: Check total count
+                total_count = session.execute(text("SELECT COUNT(*) FROM labels")).scalar()
+                max_rows = 10_000_000
+
+                if total_count > max_rows:
+                    # Calculate how many rows to delete
+                    rows_to_delete = total_count - max_rows
+
+                    # Delete oldest rows by date_added
+                    session.execute(text(f"""
+                        DELETE FROM labels
+                        WHERE id IN (
+                            SELECT id FROM labels
+                            ORDER BY date_added ASC
+                            LIMIT :rows_to_delete
+                        )
+                    """), {"rows_to_delete": rows_to_delete})
+
+                    session.commit()
+
+                return True
+            except Exception as e:
+                session.rollback()
+                print(f"Error while deleting old labels: {e}")
+                return False
+
+    @staticmethod
     def _get_labels_wdapi(ids):
         """
         Retrieve labels from the Wikidata API for a list of IDs.

@@ -552,7 +552,12 @@ class WikidataEntity:
 
     def to_triplet(self):
         label = f"{str(self.label)} ({self.id})"
-        attributes = [c.to_triplet() for c in self.claims if c]
+        attributes = []
+        if self.description:
+            attributes.append(f"description: {self.description}")
+        if self.aliases:
+            attributes.append(f"aliases: {', '.join(map(str, self.aliases))}")
+        attributes = [*attributes, *[c.to_triplet() for c in self.claims if c]]
 
         if len(attributes) > 0:
             attributes = "\n".join(attributes).split("\n")
