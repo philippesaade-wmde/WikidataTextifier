@@ -247,7 +247,7 @@ class WikidataLabel(Base):
                 'origin': '*',
             }
             headers = {
-                'User-Agent': 'Wikidata Textifier'
+                'User-Agent': 'Wikidata Textifier (embedding@wikimedia.de)'
             }
 
             response = requests.get(
@@ -263,22 +263,25 @@ class WikidataLabel(Base):
         return entities_data
 
     @staticmethod
-    def _compress_labels(labels):
+    def _compress_labels(data):
         """
         Compress labels by extracting the 'value' field from each label.
 
         Parameters:
-        - labels (dict): A dictionary of labels from Wikidata API.
+        - data (dict): A dictionary of labels from Wikidata API.
 
         Returns:
         - dict: A new dictionary with labels compressed to their 'value' field.
         """
         new_labels = {}
-        for qid, labels in labels.items():
-            new_labels[qid] = {
-                lang: label.get('value') \
-                    for lang,label in labels['labels'].items()
-            }
+        for qid, labels in data.items():
+            if 'labels' in labels:
+                new_labels[qid] = {
+                    lang: label.get('value') \
+                        for lang, label in labels['labels'].items()
+                }
+            else:
+                new_labels[qid] = {}
         return new_labels
 
     @staticmethod

@@ -288,8 +288,9 @@ class WikidataClaimValue:
         value = self.value.to_json()
         if isinstance(self.value, WikidataEntity):
             ID_name = "QID" if self.claim.datatype == 'wikibase-item' else "PID"
+            entity_id = value.get('QID') or value.get('PID')
             value = {
-                ID_name: value['QID'],
+                ID_name: entity_id,
                 'label': str(value['label'])
             }
 
@@ -322,9 +323,10 @@ class WikidataClaimValue:
         if self.rank == 'deprecated':
             string += " [deprecated]"
 
-        qualifiers = [q.to_triplet() for q in self.qualifiers if q]
+        qualifiers = [q.to_triplet(as_qualifier=True) \
+                      for q in self.qualifiers if q]
         if len(qualifiers) > 0:
-            string += f" | {' | '.join(qualifiers)})"
+            string += f" | {' | '.join(qualifiers)}"
         return string
 
 
@@ -427,14 +429,15 @@ class WikidataClaim:
 
     def to_json(self):
         property = self.property.to_json()
+        property_id = property.get('PID') or property.get('QID')
         return {
-            "PID": property['QID'],
+            "PID": property_id,
             "property_label": property['label'],
             "datatype": self.datatype,
             "values": [v.to_json() for v in self.values if v]
         }
 
-    def to_triplet(self):
+    def to_triplet(self, as_qualifier=False):
         if not self:
             return ''
 
@@ -442,9 +445,15 @@ class WikidataClaim:
         values = [v.to_triplet() for v in self.values if v]
 
         if len(values) > 0:
-            values = [f"{label}: {v}" for v in values]
-            values = "\n".join(values)
-            return values
+            if as_qualifier:
+                # For qualifiers: join multiple values with comma on same line
+                values_str = ", ".join(values)
+                return f"{label}: {values_str}"
+            else:
+                # For main claims: each value gets its own line
+                values = [f"{label}: {v}" for v in values]
+                values = "\n".join(values)
+                return values
 
         return ''
 
@@ -519,7 +528,7 @@ class WikidataEntity:
         return entity
 
     def __str__(self):
-        label_str = str(self.label)
+        label_str = str(self.label) if self.label else '<missing>'
         string = label_str
 
         if self.description:
@@ -542,16 +551,18 @@ class WikidataEntity:
                (str(self.label) != '')
 
     def to_json(self):
+        id_key = 'PID' if self.id.startswith('P') else 'QID'
+
         return {
-            'QID': self.id,
-            'label': str(self.label),
+            id_key: self.id,
+            'label': str(self.label) if self.label else None,
             'description': self.description,
             'aliases': self.aliases,
             'claims': [c.to_json() for c in self.claims if c]
         }
 
     def to_triplet(self):
-        label = f"{str(self.label)} ({self.id})"
+        label = f"{str(self.label) if self.label else '<missing>'} ({self.id})"
         attributes = []
         if self.description:
             attributes.append(f"description: {self.description}")
