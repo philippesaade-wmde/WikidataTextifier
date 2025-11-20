@@ -8,6 +8,41 @@ import re
 import requests
 from .WikidataLabel import WikidataLabel
 
+def get_wikidata_entity_by_id(
+        id,
+        props='labels,descriptions,aliases,statements'
+    ):
+    """
+    Fetches a Wikidata entity by its ID and returns a dictionary of the entity.
+
+    Parameters:
+    - id (str): A Wikidata entity ID (e.g., Q42, P31).
+    - props (str): The properties to retrieve.
+
+    Returns:
+    - dict: A dictionary containing the entity, where keys are entity IDs and values are dictionaries of properties.
+    """
+    entity_type = 'items'
+    if id.startswith('P'):
+        entity_type = 'properties'
+
+    params = {
+        '_fields': props,
+    }
+    headers = {
+        'User-Agent': 'Wikidata Textifier'
+    }
+
+    response = requests.get(
+        f"https://www.wikidata.org/w/rest.php/wikibase/v1/entities/{entity_type}/{id}",
+        params=params,
+        headers=headers
+    )
+    response.raise_for_status()
+    entity_data = response.json()
+    return entity_data
+
+
 def get_wikidata_entities_by_ids(
         ids,
         props='labels|descriptions|aliases|claims'
@@ -55,6 +90,7 @@ def get_wikidata_entities_by_ids(
         entities_data = entities_data | chunk_data
 
     return entities_data
+
 
 def get_all_missing_labels_ids(data):
     """

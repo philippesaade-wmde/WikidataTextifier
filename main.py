@@ -5,6 +5,7 @@ import traceback
 
 from src.WikidataTextifier import WikidataEntity
 from src.WikidataLabel import WikidataLabel
+from src import utils
 
 # Start Fastapi app
 app = FastAPI(
@@ -48,9 +49,9 @@ app.add_middleware(
         },
     },
 )
-async def get_labels(
+async def get_textified_wd(
     request: Request, background_tasks: BackgroundTasks,
-    id: str = Query(..., examples="Q42"),
+    id: str = Query(..., examples="Q42,Q2"),
     pid: str = Query(None, examples="P31,P279"),
     lang: str = 'en',
     format: str = 'json',
@@ -73,40 +74,56 @@ async def get_labels(
     Returns:
         list: A list of dictionaries containing QIDs and the similarity scores.
     """
-    if not id:
-        response = "ID is missing"
-        return HTTPException(status_code=422, detail=response)
-
     try:
+
+        if not id:
+            response = "ID is missing"
+            return HTTPException(status_code=422, detail=response)
+
         filter_pids = None
         if pid:
             filter_pids = [p.strip() for p in pid.split(',')]
 
-        entity = WikidataEntity.from_id(
-            id,
-            lang=lang,
-            external_ids=external_ids,
-            all_ranks=all_ranks,
-            references=references,
-            filter_pids=filter_pids
-        )
+        qids = [q.strip() for q in id.split(',')]
+        entity_dict = utils.get_wikidata_entities_by_ids(qids)
 
-        if not entity:
-            response = "Item not found"
+        if not entity_dict:
+            response = "ID not found"
             return HTTPException(status_code=404, detail=response)
 
-        if format == 'json':
-            results = entity.to_json()
-        elif format == 'triplet':
-            results = entity.to_triplet()
-        elif format == 'text':
-            results = str(entity)
-        else:
-            response = "Invalid format specified"
-            return HTTPException(status_code=422, detail=response)
+        return_data = {}
+        for id in qids:
+            if id in entity_dict:
+                entity = WikidataEntity.from_wd(
+                    entity_dict[id],
+                    id=id,
+                    lang=lang,
+                    external_ids=external_ids,
+                    all_ranks=all_ranks,
+                    references=references,
+                    filter_pids=filter_pids
+                )
+
+                if format == 'text':
+                    results = str(entity)
+                elif format == 'triplet':
+                    results = entity.to_triplet()
+                else:
+                    results = entity.to_json()
+
+                return_data[id] = results
+            else:
+                return_data[id] = None
+
+        if len(qids) == 1:
+            return_data = return_data[qids[0]]
+            if not return_data:
+                response = "Item not found"
+                return HTTPException(status_code=404, detail=response)
 
         background_tasks.add_task(WikidataLabel.delete_old_labels)
-        return results
+        return return_data
+
     except Exception as e:
         traceback.print_exc()
         raise HTTPException(status_code=500, detail="Internal Server Error")

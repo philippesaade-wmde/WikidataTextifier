@@ -467,18 +467,15 @@ class WikidataEntity:
     claims: list[WikidataClaim]
 
     @classmethod
-    def from_id(cls, id: str,
+    def from_wd(cls,
+                entity_dict: dict,
+                id: str,
                 lang: str = 'en',
                 external_ids: bool = True,
                 all_ranks: bool = False,
                 references: bool = False,
                 filter_pids: list[str] | None = None):
 
-        entity_dict = get_wikidata_entities_by_ids(id)
-        if id not in entity_dict:
-            raise ValueError(f"ID not found.")
-
-        entity_dict = entity_dict[id]
         if 'labels' not in entity_dict:
             return None
 
@@ -487,7 +484,10 @@ class WikidataEntity:
 
         aliases = entity_dict['aliases'].get(lang, []) + \
                         entity_dict['aliases'].get('mul', [])
-        aliases = list(set([alias.get('value') for alias in aliases]))
+        aliases = list(set([alias.get('value') \
+                            if isinstance(alias, dict) \
+                                else alias \
+                                    for alias in aliases]))
 
         lazylabel = LazyLabelFactory(lang=lang)
 
