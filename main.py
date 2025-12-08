@@ -104,6 +104,10 @@ async def get_textified_wd(
                     filter_pids=filter_pids
                 )
 
+                if not entity:
+                    return_data[id] = None
+                    continue
+
                 if format == 'text':
                     results = str(entity)
                 elif format == 'triplet':
