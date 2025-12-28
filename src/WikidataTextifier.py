@@ -479,8 +479,8 @@ class WikidataEntity:
         if 'labels' not in entity_dict:
             return None
 
-        label = WikidataLabel.get_lang_val(entity_dict['labels'], lang)
-        description = WikidataLabel.get_lang_val(entity_dict['descriptions'], lang)
+        label = WikidataLabel.get_lang_val(entity_dict['labels'], lang, fallback_lang='en')
+        description = WikidataLabel.get_lang_val(entity_dict['descriptions'], lang, fallback_lang='en')
 
         aliases = entity_dict['aliases'].get(lang, []) + \
                         entity_dict['aliases'].get('mul', [])

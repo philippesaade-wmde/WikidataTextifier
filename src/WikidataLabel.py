@@ -325,7 +325,7 @@ class LazyLabelFactory:
 
     def get_label(self, qid: str) -> str:
         label_dict = self._resolved_labels.get(qid, {})
-        label = WikidataLabel.get_lang_val(label_dict, lang=self.lang)
+        label = WikidataLabel.get_lang_val(label_dict, lang=self.lang, fallback_lang='en')
         return label
 
     def set_lang(self, lang: str):
