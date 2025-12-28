@@ -474,13 +474,14 @@ class WikidataEntity:
                 external_ids: bool = True,
                 all_ranks: bool = False,
                 references: bool = False,
-                filter_pids: list[str] | None = None):
+                filter_pids: list[str] | None = None,
+                fallback_lang: str = 'en'):
 
         if 'labels' not in entity_dict:
             return None
 
-        label = WikidataLabel.get_lang_val(entity_dict['labels'], lang, fallback_lang='en')
-        description = WikidataLabel.get_lang_val(entity_dict['descriptions'], lang, fallback_lang='en')
+        label = WikidataLabel.get_lang_val(entity_dict['labels'], lang, fallback_lang=fallback_lang)
+        description = WikidataLabel.get_lang_val(entity_dict['descriptions'], lang, fallback_lang=fallback_lang)
 
         aliases = entity_dict['aliases'].get(lang, []) + \
                         entity_dict['aliases'].get('mul', [])
@@ -489,7 +490,7 @@ class WikidataEntity:
                                 else alias \
                                     for alias in aliases]))
 
-        lazylabel = LazyLabelFactory(lang=lang)
+        lazylabel = LazyLabelFactory(lang=lang, fallback_lang=fallback_lang)
 
         claims = entity_dict.get('claims', {})
         if filter_pids:

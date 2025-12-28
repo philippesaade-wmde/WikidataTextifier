@@ -57,7 +57,8 @@ async def get_textified_wd(
     format: str = 'json',
     external_ids: bool = True,
     references: bool = False,
-    all_ranks: bool = False
+    all_ranks: bool = False,
+    fallback_lang: str = 'en'
 ):
     """
     Retrieve a Wikidata item with all labels or textual representations for an LLM.
@@ -70,6 +71,7 @@ async def get_textified_wd(
         external_ids (bool): If True, includes external IDs in the response.
         all_ranks (bool): If True, includes statements of all ranks (preferred, normal, deprecated).
         references (bool): If True, includes references in the response. (only available in JSON format)
+        fallback_lang (str): The fallback language code if the preferred language is not available.
 
     Returns:
         list: A list of dictionaries containing QIDs and the similarity scores.
@@ -101,7 +103,8 @@ async def get_textified_wd(
                     external_ids=external_ids,
                     all_ranks=all_ranks,
                     references=references,
-                    filter_pids=filter_pids
+                    filter_pids=filter_pids,
+                    fallback_lang=fallback_lang
                 )
 
                 if not entity:
