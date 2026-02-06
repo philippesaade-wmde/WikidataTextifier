@@ -36,6 +36,9 @@
 | `lang`         | string  | No       | Language code for labels (default: `en`)                                   |
 | `format`         | string    | No       | The format of the response, either 'json', 'text', or 'triplet' (default: `json`) |
 | `external_ids` | bool    | No       | Whether to include external IDs in the output (default: `true`)            |
+| `all_ranks` | bool    | No       | If false, returns ranked preferred statements, falling back to normal when unavailable (default: `false`)            |
+| `references` | bool    | No       | Whether to include references (default: `false`)            |
+| `fallback_lang` | string    | No       | Fallback language code if the preferred language is not available (default: `en`)            |
 
 ---
 
