@@ -1,9 +1,9 @@
-from fastapi import FastAPI, Header, HTTPException, Query, Request
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import BackgroundTasks
 import traceback
 
-from src.WikidataTextifier import WikidataEntity
+from src.Normalizer import TTLNormalizer, JSONNormalizer
 from src.WikidataLabel import WikidataLabel
 from src import utils
 
@@ -82,51 +82,78 @@ async def get_textified_wd(
             response = "ID is missing"
             return HTTPException(status_code=422, detail=response)
 
-        filter_pids = None
+        filter_pids = []
         if pid:
             filter_pids = [p.strip() for p in pid.split(',')]
 
         qids = [q.strip() for q in id.split(',')]
-        entity_dict = utils.get_wikidata_entities_by_ids(qids)
 
-        if not entity_dict:
-            response = "ID not found"
-            return HTTPException(status_code=404, detail=response)
+        entities = {}
+        if len(qids) == 1:
+            # When one QID is requested, TTL is used
+            entity_data = utils.get_wikidata_ttl_by_id(qids[0], lang=lang)
+            if not entity_data:
+                response = "ID not found"
+                return HTTPException(status_code=404, detail=response)
 
-        return_data = {}
-        for id in qids:
-            if id in entity_dict:
-                entity = WikidataEntity.from_wd(
-                    entity_dict[id],
-                    id=id,
-                    lang=lang,
+            entity_data = TTLNormalizer(
+                entity_id=qids[0],
+                ttl_text=entity_data,
+                lang=lang,
+                fallback_lang=fallback_lang,
+                debug=False,
+            )
+
+            entities = {
+                qids[0]: entity_data.normalize(
                     external_ids=external_ids,
                     all_ranks=all_ranks,
                     references=references,
-                    filter_pids=filter_pids,
-                    fallback_lang=fallback_lang
+                    filter_pids=filter_pids
                 )
-
-                if not entity:
-                    return_data[id] = None
-                    continue
-
-                if format == 'text':
-                    results = str(entity)
-                elif format == 'triplet':
-                    results = entity.to_triplet()
-                else:
-                    results = entity.to_json()
-
-                return_data[id] = results
-            else:
-                return_data[id] = None
-
-        if len(qids) == 1:
-            return_data = return_data[qids[0]]
-            if not return_data:
-                response = "Item not found"
+            }
+        else:
+            # JSON is used with Action API for bulk retrieval
+            entity_data = utils.get_wikidata_json_by_ids(qids)
+            if not entity_data:
+                response = "IDs not found"
                 return HTTPException(status_code=404, detail=response)
+
+            entity_data = {
+                qid: JSONNormalizer(
+                    entity_id=qid,
+                    entity_json=entity_data[qid],
+                    lang=lang,
+                    fallback_lang=fallback_lang,
+                    debug=False,
+                ) if entity_data.get(qid) else None
+                for qid in qids
+            }
+
+            entities = {
+                qid: entity.normalize(
+                    external_ids=external_ids,
+                    all_ranks=all_ranks,
+                    references=references,
+                    filter_pids=filter_pids
+                ) if entity else None
+                for qid, entity in entity_data.items()
+            }
+
+        return_data = {}
+        for qid, entity in entities.items():
+            if not entity:
+                return_data[qid] = None
+                continue
+
+            if format == 'text':
+                results = str(entity)
+            elif format == 'triplet':
+                results = entity.to_triplet()
+            else:
+                results = entity.to_json()
+
+            return_data[qid] = results
 
         background_tasks.add_task(WikidataLabel.delete_old_labels)
         return return_data

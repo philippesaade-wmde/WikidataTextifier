@@ -1,8 +1,80 @@
 services:
+
+# Database for Wikibase & for caching the labels for the Textifier
+  db:
+    container_name: db
+    image: mariadb:10.11
+    environment:
+      MARIADB_DATABASE: ${DB_NAME_WIKI}
+      MARIADB_USER: ${DB_USER}
+      MARIADB_PASSWORD: ${DB_PASS}
+      MARIADB_ROOT_USER: ${DB_USER}
+      MARIADB_ROOT_PASSWORD: ${DB_PASS}
+    volumes:
+      - ./data/mysql:/var/lib/mysql
+      - ./docker-entrypoint-initdb:/docker-entrypoint-initdb.d
+    ports:
+      - "3306:3306"
+    healthcheck:
+      test: ["CMD-SHELL", "mariadb-admin ping -h 127.0.0.1 -u root -p$${MARIADB_ROOT_PASSWORD} --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+# Wikibase instance only used for formatting time datatypes
+  wikibase:
+    container_name: wikibase
+    image: wikibase/wikibase:mw1.44.0
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_SERVER: db
+      DB_NAME: ${DB_NAME_WIKI}
+      DB_USER: ${DB_USER}
+      DB_PASS: ${DB_PASS}
+
+      MW_ADMIN_NAME: ${MW_ADMIN_NAME}
+      MW_ADMIN_PASS: ${MW_ADMIN_PASS}
+      MW_ADMIN_EMAIL: ${MW_ADMIN_EMAIL}
+
+      MW_SITE_LANG: en
+      MW_SITE_NAME: "Formatter"
+      MW_WG_SERVER: "http://wikibase"
+
+      METADATA_CALLBACK: "false"
+    volumes:
+      - ./data/config:/config
+    tmpfs:
+      - /tmp
+      - /var/tmp
+      - /run
+      - /var/cache
+      - /var/log
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost/w/api.php?action=query&meta=siteinfo&format=json > /dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+
+# Textifier
   wdtextifier:
+    container_name: wdtextifier
     build: .
+    depends_on:
+      db:
+        condition: service_healthy
+      wikibase:
+        condition: service_healthy
+    environment:
+      WIKIBASE_HOST: wikibase
+      DB_HOST: db
+      DB_NAME: ${DB_NAME_LABEL}
+      DB_USER: ${DB_USER}
+      DB_PASS: ${DB_PASS}
     volumes:
       - ./data:/workspace/data
-    container_name: wdtextifier
     ports:
       - "5000:5000"

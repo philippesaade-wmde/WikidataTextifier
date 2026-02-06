@@ -1,53 +1,48 @@
-from sqlalchemy import Column, Text, create_engine, text
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.types import TypeDecorator
+from sqlalchemy import Column, String, DateTime, create_engine, text
+from sqlalchemy.dialects.mysql import JSON
+from sqlalchemy.orm import sessionmaker, declarative_base
 
 from datetime import datetime, timedelta
-import json
 import requests
 import os
+import json
 
 """
-SQLite database setup for storing Wikidata labels in all languages.
+MySQL database setup for storing Wikidata labels in all languages.
 """
-TOOL_DATA_DIR = os.environ.get("TOOL_DATA_DIR", "./data")
-DATABASE_URL = os.path.join(TOOL_DATA_DIR, 'sqlite_wikidata_labels.db')
 
-engine = create_engine(f'sqlite:///{DATABASE_URL}',
+DB_HOST = os.environ["DB_HOST"]
+DB_NAME = os.environ["DB_NAME"]
+DB_USER = os.environ["DB_USER"]
+DB_PASS = os.environ["DB_PASS"]
+DB_PORT = int(os.environ.get("DB_PORT", "3306"))
+
+DATABASE_URL = (
+    f"mariadb+pymysql://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+    f"?charset=utf8mb4"
+)
+
+engine = create_engine(
+    DATABASE_URL,
     pool_size=5,  # Limit the number of open connections
     max_overflow=10,  # Allow extra connections beyond pool_size
-    pool_recycle=10  # Recycle connections every 10 seconds
+    pool_recycle=1800,  # Recycle connections every 30 minutes
+    pool_pre_ping=True,
 )
 
 Base = declarative_base()
-Session = sessionmaker(bind=engine)
-
-class JSONType(TypeDecorator):
-    """Custom SQLAlchemy type for JSON storage in SQLite."""
-    impl = Text
-    cache_ok = False
-
-    def process_bind_param(self, value, dialect):
-        if value is not None:
-            return json.dumps(value, separators=(',', ':'))
-        return None
-
-    def process_result_value(self, value, dialect):
-        if value is not None:
-            return json.loads(value)
-        return None
+Session = sessionmaker(bind=engine, expire_on_commit=False)
 
 class WikidataLabel(Base):
     __tablename__ = 'labels'
-    id = Column(Text, primary_key=True)
-    labels = Column(JSONType)
-    date_added = Column(Text, default=datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+    id = Column(String(64), primary_key=True)
+    labels = Column(JSON, default=dict)
+    date_added = Column(DateTime, default=datetime.now, index=True)
 
     @staticmethod
     def add_bulk_labels(data):
         """
-        Insert multiple label records in bulk. If a record with the same ID exists, it is ignored (no update is performed).
+        Insert multiple label records in bulk.
 
         Parameters:
         - data (list[dict]): A list of dictionaries, each containing 'id', 'labels' keys.
@@ -56,24 +51,19 @@ class WikidataLabel(Base):
         - bool: True if the operation was successful, False otherwise.
         """
         for i in range(len(data)):
-            # Ensure labels are JSON-encoded strings
-            if isinstance(data[i]['labels'], dict):
-                data[i]['labels'] = json.dumps(
-                    data[i]['labels'],
-                    separators=(',', ':')
-                )
+            data[i]['date_added'] = datetime.now()
+            if isinstance(data[i].get("labels"), dict):
+                data[i]["labels"] = json.dumps(data[i]["labels"], ensure_ascii=False, separators=(",", ":"))
 
-            # Add date_added
-            data[i]['date_added'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
         with Session() as session:
             try:
                 session.execute(text('''
                     INSERT INTO labels (id, labels, date_added)
                     VALUES (:id, :labels, :date_added)
-                    ON CONFLICT(id) DO UPDATE
-                    SET labels = EXCLUDED.labels,
-                    date_added = EXCLUDED.date_added
+                    ON DUPLICATE KEY UPDATE
+                    labels = VALUES(labels),
+                    date_added = VALUES(date_added)
                 '''), data)
 
                 session.commit()
@@ -122,7 +112,7 @@ class WikidataLabel(Base):
         """
         with Session() as session:
             # Get labels that are less than 90 days old
-            date_limit = (datetime.now() - timedelta(days=90)).strftime('%Y-%m-%d %H:%M:%S')
+            date_limit = (datetime.now() - timedelta(days=90))
             item = session.query(WikidataLabel)\
                 .filter(
                     WikidataLabel.id == id,
@@ -130,7 +120,7 @@ class WikidataLabel(Base):
                 ).first()
 
             if item is not None:
-                return item.labels
+                return item.labels or {}
 
         labels = WikidataLabel._get_labels_wdapi(id).get(id)
         if labels:
@@ -154,7 +144,7 @@ class WikidataLabel(Base):
 
         with Session() as session:
             # Get labels that are less than 90 days old
-            date_limit = (datetime.now() - timedelta(days=90)).strftime('%Y-%m-%d %H:%M:%S')
+            date_limit = (datetime.now() - timedelta(days=90))
             rows = session.query(WikidataLabel.id, WikidataLabel.labels)\
                 .filter(
                     WikidataLabel.id.in_(ids),
@@ -184,7 +174,7 @@ class WikidataLabel(Base):
         with Session() as session:
             try:
                 # Step 1: Delete labels older than 90 days
-                date_limit = (datetime.now() - timedelta(days=90)).strftime('%Y-%m-%d %H:%M:%S')
+                date_limit = (datetime.now() - timedelta(days=90))
                 session.execute(
                     text("DELETE FROM labels WHERE date_added < :date_limit"),
                     {"date_limit": date_limit}
@@ -297,6 +287,40 @@ class WikidataLabel(Base):
             return label
         return label.get('value', '')
 
+    @staticmethod
+    def get_all_missing_labels_ids(data):
+        """
+        Get the IDs of the entity dictionary where their labels are missing.
+
+        Parameters:
+        - data (dict or list): The data structure to search for missing labels.
+
+        Returns:
+        - set: A set of IDs that are missing labels.
+        """
+        ids_list = set()
+
+        if isinstance(data, dict):
+            if 'property' in data:
+                ids_list.add(data['property'])
+            if ('unit' in data) and (data['unit'] != '1'):
+                ids_list.add(data['unit'].split('/')[-1])
+            if ('datatype' in data) and \
+                ('datavalue' in data) and \
+                (data['datatype'] in ['wikibase-item', 'wikibase-property']):
+                ids_list.add(data['datavalue']['value']['id'])
+            if ('claims' in data) and isinstance(data['claims'], dict):
+                ids_list = ids_list | data['claims'].keys()
+
+            for _, value in data.items():
+                ids_list = ids_list | WikidataLabel.get_all_missing_labels_ids(value)
+
+        elif isinstance(data, list):
+            for item in data:
+                ids_list = ids_list | WikidataLabel.get_all_missing_labels_ids(item)
+
+        return ids_list
+
 class LazyLabel:
     def __init__(self, qid, factory):
         self.qid = qid
@@ -320,6 +344,8 @@ class LazyLabelFactory:
     def resolve_all(self):
         if not self._pending_ids:
             return
+
+        self._pending_ids = self._pending_ids - set(self._resolved_labels.keys())
         label_data = WikidataLabel.get_bulk_labels(list(self._pending_ids))
         self._resolved_labels.update(label_data)
         self._pending_ids.clear()

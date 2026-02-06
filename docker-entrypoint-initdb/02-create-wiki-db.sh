@@ -1,0 +1,12 @@
+#!/bin/sh
+set -eu
+
+: "${DB_NAME_WIKI:=wiki}"
+
+mariadb -uroot -p"$MARIADB_ROOT_PASSWORD" <<SQL
+CREATE DATABASE IF NOT EXISTS \`$DB_NAME_WIKI\`
+  CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+GRANT ALL PRIVILEGES ON \`$DB_NAME_WIKI\`.* TO '$MARIADB_USER'@'%';
+FLUSH PRIVILEGES;
+SQL
