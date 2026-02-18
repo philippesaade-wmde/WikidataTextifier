@@ -3,6 +3,8 @@ import json
 import html
 import os
 
+REQUEST_TIMEOUT_SECONDS = float(os.environ.get("REQUEST_TIMEOUT_SECONDS", "15"))
+
 def get_wikidata_ttl_by_id(
         id,
         lang='en',
@@ -26,7 +28,8 @@ def get_wikidata_ttl_by_id(
     response = requests.get(
         f"https://www.wikidata.org/wiki/Special:EntityData/{id}.ttl",
         params=params,
-        headers=headers
+        headers=headers,
+        timeout=REQUEST_TIMEOUT_SECONDS,
     )
     response.raise_for_status()
     return response.text
@@ -72,7 +75,8 @@ def get_wikidata_json_by_ids(
         response = requests.get(
             "https://www.wikidata.org/w/api.php?",
             params=params,
-            headers=headers
+            headers=headers,
+            timeout=REQUEST_TIMEOUT_SECONDS,
         )
         response.raise_for_status()
         chunk_data = response.json().get("entities", {})
@@ -93,6 +97,8 @@ def wikidata_time_to_text(value: dict, lang: str = "en"):
     WIKIBASE_API = f"http://{WIKIBASE_HOST}/w/api.php"
 
     time = value.get("time")
+    if not isinstance(time, str) or not time:
+        raise ValueError("Invalid or missing time value")
     if time.endswith("+00:00"):
         time = time[:-6] + "Z"
     if not time.startswith("+") and not time.startswith("-"):
@@ -115,10 +121,12 @@ def wikidata_time_to_text(value: dict, lang: str = "en"):
         "format": "json",
         "uselang": lang,
         "datavalue": json.dumps(datavalue),
-    })
+    }, timeout=REQUEST_TIMEOUT_SECONDS)
     r.raise_for_status()
 
     data = r.json()
+    if "result" not in data:
+        raise ValueError("Missing 'result' in wbformatvalue response")
     return html.unescape(data["result"])
 
 
@@ -145,8 +153,10 @@ def wikidata_geolocation_to_text(value: dict, lang: str = "en"):
         "format": "json",
         "uselang": lang,
         "datavalue": json.dumps(datavalue),
-    })
+    }, timeout=REQUEST_TIMEOUT_SECONDS)
     r.raise_for_status()
 
     data = r.json()
+    if "result" not in data:
+        raise ValueError("Missing 'result' in wbformatvalue response")
     return html.unescape(data["result"])

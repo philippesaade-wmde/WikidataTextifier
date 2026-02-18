@@ -2,12 +2,13 @@ from __future__ import annotations
 
 from collections import defaultdict
 from typing import Any, DefaultDict, Dict, List, Optional, Set
+import requests
 
 from rdflib import Graph, Literal, Namespace, URIRef
 from rdflib.namespace import RDF, RDFS
 
 from ..WikidataLabel import WikidataLabel, LazyLabelFactory
-from ..WikidataTextifier import (
+from ..Textifier.WikidataTextifier import (
     WikidataClaim,
     WikidataClaimValue,
     WikidataCoordinates,
@@ -80,6 +81,7 @@ class TTLNormalizer:
         external_ids: bool = True,
         references: bool = False,
         all_ranks: bool = False,
+        qualifiers: bool = True,
         filter_pids: List[str] = []
     ) -> WikidataEntity:
         # Preload labels found inside TTL so LazyLabelFactory can avoid lookups.
@@ -107,6 +109,7 @@ class TTLNormalizer:
             external_ids=external_ids,
             include_references=references,
             all_ranks=all_ranks,
+            qualifiers=qualifiers,
             filter_pids=filter_pids
         )
 
@@ -124,6 +127,7 @@ class TTLNormalizer:
                 pid=pid,
                 statements=statements,
                 include_references=references,
+                qualifiers=qualifiers,
             )
             for pid, statements in claims_dict.items()
             if statements
@@ -162,6 +166,7 @@ class TTLNormalizer:
         external_ids: bool,
         include_references: bool,
         all_ranks: bool,
+        qualifiers: bool,
         filter_pids: List[str] = []
     ) -> Dict[str, List[Dict[str, Any]]]:
         """Return mapping: pid -> list of statement dicts."""
@@ -195,7 +200,7 @@ class TTLNormalizer:
             is_special = self._is_special_main_value(obj, pid)
             main = None if is_special else self._main_value(obj, pid, datatype)
 
-            qualifiers = self._qualifiers(obj)
+            qualifiers_data = self._qualifiers(obj) if qualifiers else {}
             refs = self._references(obj) if include_references else []
 
             out[pid].append(
@@ -204,7 +209,7 @@ class TTLNormalizer:
                     "datatype": datatype,
                     "rank": rank,
                     "main": main,
-                    "qualifiers": qualifiers if qualifiers else {},
+                    "qualifiers": qualifiers_data if qualifiers_data else {},
                     "references": refs if refs else [],
                     "is_special_value": is_special,
                 }
@@ -273,6 +278,7 @@ class TTLNormalizer:
         pid: str,
         statements: List[Dict[str, Any]],
         include_references: bool,
+        qualifiers: bool = True,
     ) -> WikidataClaim:
         prop_ent = WikidataEntity(
             id=pid,
@@ -291,15 +297,17 @@ class TTLNormalizer:
                 print(f"{pid}: {st.get('main')} (special: {st.get('is_special_value', False)})")
 
             value_obj = self._to_value_object(st["datatype"], st.get("main"))
+            qualifiers_obj: List[WikidataClaim] = []
 
-            qualifiers_obj: List[WikidataClaim] = [
-                self._build_snak_claim(
-                    pid=qpid,
-                    datatype=self._prop_datatype(qpid),
-                    snaks=qsnaks,
-                )
-                for qpid, qsnaks in (st.get("qualifiers") or {}).items()
-            ]
+            if qualifiers:
+                qualifiers_obj = [
+                    self._build_snak_claim(
+                        pid=qpid,
+                        datatype=self._prop_datatype(qpid),
+                        snaks=qsnaks,
+                    )
+                    for qpid, qsnaks in (st.get("qualifiers") or {}).items()
+                ]
 
             refs_obj: List[List[WikidataClaim]] = []
             if include_references:
@@ -409,7 +417,7 @@ class TTLNormalizer:
                     parsed,
                     self.lang,
                 )
-            except (ValueError, TypeError) as e:
+            except (ValueError, TypeError, KeyError, requests.RequestException) as e:
                 if self.debug:
                     print(f"Warning: Failed to parse time value {time_val}: {e}")
                 return None
@@ -436,7 +444,7 @@ class TTLNormalizer:
 
             try:
                 string_val = wikidata_geolocation_to_text(parsed, self.lang)
-            except (ValueError, TypeError) as e:
+            except (ValueError, TypeError, KeyError, requests.RequestException) as e:
                 if self.debug:
                     print(f"Warning: Failed to parse coordinates ({lat}, {lon}): {e}")
                 return None

@@ -11,11 +11,16 @@ import json
 MySQL database setup for storing Wikidata labels in all languages.
 """
 
-DB_HOST = os.environ["DB_HOST"]
-DB_NAME = os.environ["DB_NAME"]
-DB_USER = os.environ["DB_USER"]
-DB_PASS = os.environ["DB_PASS"]
+DB_HOST = os.environ.get("DB_HOST", "localhost")
+DB_NAME = os.environ.get("DB_NAME", "label")
+DB_USER = os.environ.get("DB_USER", "root")
+DB_PASS = os.environ.get("DB_PASS", "")
 DB_PORT = int(os.environ.get("DB_PORT", "3306"))
+
+LABEL_UNLIMITED = os.environ.get("LABEL_UNLIMITED", "false") == "true"
+LABEL_TTL_DAYS = int(os.environ.get("LABEL_TTL_DAYS", "90"))
+LABEL_MAX_ROWS = int(os.environ.get("LABEL_MAX_ROWS", "10000000"))
+REQUEST_TIMEOUT_SECONDS = float(os.environ.get("REQUEST_TIMEOUT_SECONDS", "15"))
 
 DATABASE_URL = (
     f"mariadb+pymysql://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
@@ -40,6 +45,18 @@ class WikidataLabel(Base):
     date_added = Column(DateTime, default=datetime.now, index=True)
 
     @staticmethod
+    def initialize_database():
+        """
+        Create tables if they don't already exist.
+        """
+        try:
+            Base.metadata.create_all(engine)
+            return True
+        except Exception as e:
+            print(f"Error while initializing labels database: {e}")
+            return False
+
+    @staticmethod
     def add_bulk_labels(data):
         """
         Insert multiple label records in bulk.
@@ -50,6 +67,9 @@ class WikidataLabel(Base):
         Returns:
         - bool: True if the operation was successful, False otherwise.
         """
+        if not data:
+            return True
+
         for i in range(len(data)):
             data[i]['date_added'] = datetime.now()
             if isinstance(data[i].get("labels"), dict):
@@ -110,17 +130,20 @@ class WikidataLabel(Base):
         Returns:
         - dict: The labels dictionary if found, otherwise an empty dict.
         """
-        with Session() as session:
-            # Get labels that are less than 90 days old
-            date_limit = (datetime.now() - timedelta(days=90))
-            item = session.query(WikidataLabel)\
-                .filter(
-                    WikidataLabel.id == id,
-                    WikidataLabel.date_added >= date_limit
-                ).first()
+        try:
+            with Session() as session:
+                # Get labels that are less than LABEL_TTL_DAYS old
+                date_limit = (datetime.now() - timedelta(days=LABEL_TTL_DAYS))
+                item = session.query(WikidataLabel)\
+                    .filter(
+                        WikidataLabel.id == id,
+                        WikidataLabel.date_added >= date_limit
+                    ).first()
 
-            if item is not None:
-                return item.labels or {}
+                if item is not None:
+                    return item.labels or {}
+        except Exception as e:
+            print(f"Error while fetching cached label {id}: {e}")
 
         labels = WikidataLabel._get_labels_wdapi(id).get(id)
         if labels:
@@ -142,15 +165,19 @@ class WikidataLabel(Base):
         if not ids:
             return {}
 
-        with Session() as session:
-            # Get labels that are less than 90 days old
-            date_limit = (datetime.now() - timedelta(days=90))
-            rows = session.query(WikidataLabel.id, WikidataLabel.labels)\
-                .filter(
-                    WikidataLabel.id.in_(ids),
-                    WikidataLabel.date_added >= date_limit
-                ).all()
-            labels = {id: labels for id, labels in rows}
+        labels = {}
+        try:
+            with Session() as session:
+                # Get labels that are less than LABEL_TTL_DAYS old
+                date_limit = (datetime.now() - timedelta(days=LABEL_TTL_DAYS))
+                rows = session.query(WikidataLabel.id, WikidataLabel.labels)\
+                    .filter(
+                        WikidataLabel.id.in_(ids),
+                        WikidataLabel.date_added >= date_limit
+                    ).all()
+                labels = {id: labels for id, labels in rows}
+        except Exception as e:
+            print(f"Error while fetching cached labels in bulk: {e}")
 
         # Fallback when labels are missing from the database
         missing_ids = set(ids) - set(labels.keys())
@@ -160,7 +187,8 @@ class WikidataLabel(Base):
 
             # Cache labels
             WikidataLabel.add_bulk_labels([
-                {'id': id, 'labels': missing_labels[id]} for id in missing_ids
+                {'id': entity_id, 'labels': entity_labels}
+                for entity_id, entity_labels in missing_labels.items()
             ])
 
         return labels
@@ -168,13 +196,16 @@ class WikidataLabel(Base):
     @staticmethod
     def delete_old_labels():
         """
-        Delete labels older than 90 days.
+        Delete labels older than X days.
         If the database exceeds 10 million rows, delete the oldest rows until it is below the threshold.
         """
+        if LABEL_UNLIMITED:
+            return True
+
         with Session() as session:
             try:
-                # Step 1: Delete labels older than 90 days
-                date_limit = (datetime.now() - timedelta(days=90))
+                # Step 1: Delete labels older than X days
+                date_limit = (datetime.now() - timedelta(days=LABEL_TTL_DAYS))
                 session.execute(
                     text("DELETE FROM labels WHERE date_added < :date_limit"),
                     {"date_limit": date_limit}
@@ -183,21 +214,25 @@ class WikidataLabel(Base):
 
                 # Step 2: Check total count
                 total_count = session.execute(text("SELECT COUNT(*) FROM labels")).scalar()
-                max_rows = 10_000_000
 
-                if total_count > max_rows:
+                if total_count > LABEL_MAX_ROWS:
                     # Calculate how many rows to delete
-                    rows_to_delete = total_count - max_rows
+                    rows_to_delete = total_count - LABEL_MAX_ROWS
 
-                    # Delete oldest rows by date_added
-                    session.execute(text(f"""
-                        DELETE FROM labels
-                        WHERE id IN (
-                            SELECT id FROM labels
-                            ORDER BY date_added ASC
-                            LIMIT :rows_to_delete
-                        )
-                    """), {"rows_to_delete": rows_to_delete})
+                    # Delete oldest rows by date_added (MySQL-safe form)
+                    session.execute(
+                        text("""
+                            DELETE l
+                            FROM labels AS l
+                            JOIN (
+                                SELECT id
+                                FROM labels
+                                ORDER BY date_added ASC
+                                LIMIT :rows_to_delete
+                            ) AS old_labels ON l.id = old_labels.id
+                        """),
+                        {"rows_to_delete": rows_to_delete}
+                    )
 
                     session.commit()
 
@@ -243,7 +278,8 @@ class WikidataLabel(Base):
             response = requests.get(
                 "https://www.wikidata.org/w/api.php?",
                 params=params,
-                headers=headers
+                headers=headers,
+                timeout=REQUEST_TIMEOUT_SECONDS,
             )
             response.raise_for_status()
             chunk_data = response.json().get("entities", {})
@@ -358,7 +394,3 @@ class LazyLabelFactory:
     def set_lang(self, lang: str):
         self.lang = lang
         self.resolve_all()
-
-
-# Create tables if they don't already exist.
-Base.metadata.create_all(engine)

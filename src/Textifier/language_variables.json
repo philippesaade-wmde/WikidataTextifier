@@ -1,0 +1,44 @@
+{
+    "en": {
+        "also known as": "also known as",
+        "Attributes include": "Attributes include",
+        ", ": ", ",
+        "has": "has",
+        "Examples": "Examples"
+    },
+    "fr": {
+        "also known as": "aussi connu sous le nom de",
+        "Attributes include": "Ses attributs incluent",
+        ", ": ", ",
+        "has": "possède",
+        "Examples": "Exemples"
+    },
+    "ar": {
+        "also known as": "المعروف أيضًا باسم",
+        "Attributes include": "السمات تتضمن",
+        ", ": "، ",
+        "has": "لديها",
+        "Examples": "أمثلة"
+    },
+    "de": {
+        "also known as": "auch bekannt als",
+        "Attributes include": "Attribute sind",
+        ", ": ", ",
+        "has": "hat",
+        "Examples": "Beispiele"
+    },
+    "es": {
+        "also known as": "también conocido como",
+        "Attributes include": "Sus atributos incluyen",
+        ", ": ", ",
+        "has": "tiene",
+        "Examples": "Ejemplos"
+    },
+    "zh": {
+        "also known as": "也称为",
+        "Attributes include": "属性包括",
+        ", ": "，",
+        "has": "有",
+        "Examples": "示例"
+    }
+}

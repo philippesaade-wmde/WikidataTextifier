@@ -1,3 +1,4 @@
 from .WikidataLabel import *
-from .WikidataTextifier import *
+from .Textifier import *
+from .Normalizer import *
 from .utils import *

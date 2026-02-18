@@ -69,6 +69,10 @@ services:
       wikibase:
         condition: service_healthy
     environment:
+      LABEL_UNLIMITED: ${LABEL_UNLIMITED}
+      LABEL_TTL_DAYS: ${LABEL_TTL_DAYS}
+      LABEL_MAX_ROWS: ${LABEL_MAX_ROWS}
+
       WIKIBASE_HOST: wikibase
       DB_HOST: db
       DB_NAME: ${DB_NAME_LABEL}

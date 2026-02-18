@@ -2,6 +2,7 @@ from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import BackgroundTasks
 import traceback
+import requests
 
 from src.Normalizer import TTLNormalizer, JSONNormalizer
 from src.WikidataLabel import WikidataLabel
@@ -25,6 +26,10 @@ app.add_middleware(
     allow_methods=["GET"],
     allow_headers=["*"],
 )
+
+@app.on_event("startup")
+async def startup():
+    WikidataLabel.initialize_database()
 
 @app.get(
     "/",
@@ -58,6 +63,7 @@ async def get_textified_wd(
     external_ids: bool = True,
     references: bool = False,
     all_ranks: bool = False,
+    qualifiers: bool = True,
     fallback_lang: str = 'en'
 ):
     """
@@ -71,17 +77,13 @@ async def get_textified_wd(
         external_ids (bool): If True, includes external IDs in the response.
         all_ranks (bool): If True, includes statements of all ranks (preferred, normal, deprecated).
         references (bool): If True, includes references in the response. (only available in JSON format)
+        qualifiers (bool): If True, includes qualifiers in the response.
         fallback_lang (str): The fallback language code if the preferred language is not available.
 
     Returns:
         list: A list of dictionaries containing QIDs and the similarity scores.
     """
     try:
-
-        if not id:
-            response = "ID is missing"
-            return HTTPException(status_code=422, detail=response)
-
         filter_pids = []
         if pid:
             filter_pids = [p.strip() for p in pid.split(',')]
@@ -94,7 +96,7 @@ async def get_textified_wd(
             entity_data = utils.get_wikidata_ttl_by_id(qids[0], lang=lang)
             if not entity_data:
                 response = "ID not found"
-                return HTTPException(status_code=404, detail=response)
+                raise HTTPException(status_code=404, detail=response)
 
             entity_data = TTLNormalizer(
                 entity_id=qids[0],
@@ -109,7 +111,8 @@ async def get_textified_wd(
                     external_ids=external_ids,
                     all_ranks=all_ranks,
                     references=references,
-                    filter_pids=filter_pids
+                    filter_pids=filter_pids,
+                    qualifiers=qualifiers,
                 )
             }
         else:
@@ -117,7 +120,7 @@ async def get_textified_wd(
             entity_data = utils.get_wikidata_json_by_ids(qids)
             if not entity_data:
                 response = "IDs not found"
-                return HTTPException(status_code=404, detail=response)
+                raise HTTPException(status_code=404, detail=response)
 
             entity_data = {
                 qid: JSONNormalizer(
@@ -135,7 +138,8 @@ async def get_textified_wd(
                     external_ids=external_ids,
                     all_ranks=all_ranks,
                     references=references,
-                    filter_pids=filter_pids
+                    filter_pids=filter_pids,
+                    qualifiers=qualifiers
                 ) if entity else None
                 for qid, entity in entity_data.items()
             }
@@ -147,7 +151,7 @@ async def get_textified_wd(
                 continue
 
             if format == 'text':
-                results = str(entity)
+                results = entity.to_text(lang)
             elif format == 'triplet':
                 results = entity.to_triplet()
             else:
@@ -158,6 +162,10 @@ async def get_textified_wd(
         background_tasks.add_task(WikidataLabel.delete_old_labels)
         return return_data
 
-    except Exception as e:
+    except HTTPException:
+        raise
+    except requests.RequestException:
+        raise HTTPException(status_code=502, detail="Upstream service unavailable")
+    except Exception:
         traceback.print_exc()
         raise HTTPException(status_code=500, detail="Internal Server Error")

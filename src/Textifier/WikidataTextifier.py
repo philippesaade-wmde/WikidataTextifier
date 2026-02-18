@@ -1,7 +1,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
+import json
+
+LANGUAGE_VARIABLES_PATH = Path(__file__).with_name("language_variables.json")
+with LANGUAGE_VARIABLES_PATH.open("r", encoding="utf-8") as f:
+    LANGUAGE_VARIABLES = json.load(f)
 
 # ---------------------------------------------------------------------------
 # Atomic value types
@@ -107,6 +113,27 @@ class WikidataEntity:
     def __bool__(self) -> bool:
         return bool(self.id) and self.label is not None and str(self.label) != ""
 
+    def to_text(self, lang='en') -> str:
+        lang_var = LANGUAGE_VARIABLES.get(lang, LANGUAGE_VARIABLES.get('en'))
+
+        label_str = str(self.label) if self.label else '<missing>'
+        string = label_str
+
+        if self.description:
+            string += f"{lang_var[', ']}{self.description}"
+        if self.aliases:
+            string += f"{lang_var[', ']}{lang_var['also known as']}"
+            string += f" {lang_var[', '].join(map(str, self.aliases))}"
+
+        attributes = [c.to_text(lang) for c in self.claims if c]
+        if len(attributes) > 0:
+            attributes = "\n- ".join(attributes)
+            string += f". {lang_var['Attributes include']}:\n- {attributes}"
+        elif string != label_str:
+            string += "."
+
+        return string
+
     def to_json(self) -> Dict[str, Any]:
         id_key = "PID" if self.id.startswith("P") else "QID"
         return {
@@ -148,11 +175,17 @@ class WikidataClaim:
             and any(bool(v) for v in self.values)
         )
 
-    def __str__(self) -> str:
+    def to_text(self, lang='en') -> str:
+        lang_var = LANGUAGE_VARIABLES.get(lang, LANGUAGE_VARIABLES.get('en'))
+
         if not self:
             return ""
-        values = ", ".join(str(v) for v in self.values if v)
-        return f"{str(self.property.label)}: {values}"
+
+        if self.values:
+            values = lang_var[', '].join(v.to_text(lang) for v in self.values if v)
+            return f"{str(self.property.label)}: {values}"
+
+        return f"{lang_var['has']} {str(self.property.label)}"
 
     def to_json(self) -> Dict[str, Any]:
         prop_json = self.property.to_json()
@@ -195,18 +228,23 @@ class WikidataClaimValue:
     def __bool__(self) -> bool:
         return self.value is not None and str(self.value) != ""
 
-    def __str__(self) -> str:
+    def to_text(self, lang='en') -> str:
+        lang_var = LANGUAGE_VARIABLES.get(lang, LANGUAGE_VARIABLES.get('en'))
+
         if not self:
             return ""
 
-        s = str(self.value)
+        if isinstance(self.value, WikidataEntity):
+            s = self.value.to_text(lang)
+        else:
+            s = str(self.value)
 
         if self.rank == "deprecated":
             s += " [deprecated]"
 
-        qs = [str(q) for q in self.qualifiers if q]
+        qs = [q.to_text(lang) for q in self.qualifiers if q]
         if qs:
-            s += f" ({', '.join(qs)})"
+            s += f" ({lang_var[', '].join(qs)})"
 
         return s
 

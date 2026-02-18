@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
+import requests
 
 from ..WikidataLabel import WikidataLabel, LazyLabelFactory
-from ..WikidataTextifier import (
+from ..Textifier.WikidataTextifier import (
     WikidataClaim,
     WikidataClaimValue,
     WikidataCoordinates,
@@ -45,6 +46,7 @@ class JSONNormalizer:
         external_ids: bool = True,
         references: bool = False,
         all_ranks: bool = False,
+        qualifiers: bool = True,
         filter_pids: List[str] = [],
     ) -> WikidataEntity:
         e = self.entity_json
@@ -91,6 +93,7 @@ class JSONNormalizer:
                 external_ids=external_ids,
                 include_references=references,
                 all_ranks=all_ranks,
+                qualifiers=qualifiers
             )
             if claim_obj and claim_obj.values:
                 claims_out.append(claim_obj)
@@ -116,6 +119,7 @@ class JSONNormalizer:
         external_ids: bool,
         include_references: bool,
         all_ranks: bool,
+        qualifiers: bool,
     ) -> Optional[WikidataClaim]:
         datatype = self._claim_datatype_from_statements(statements) or "string"
         if (not external_ids) and datatype == "external-id":
@@ -141,6 +145,7 @@ class JSONNormalizer:
                 statement=st,
                 datatype=datatype,
                 include_references=include_references,
+                qualifiers=qualifiers
             )
             if cv is not None:
                 values.append(cv)
@@ -187,6 +192,7 @@ class JSONNormalizer:
         statement: Dict[str, Any],
         datatype: str,
         include_references: bool,
+        qualifiers: bool,
     ) -> Optional[WikidataClaimValue]:
         mainsnak = statement.get("mainsnak", statement)
         if not isinstance(mainsnak, dict):
@@ -206,7 +212,9 @@ class JSONNormalizer:
         datavalue = mainsnak.get("datavalue")
         value_obj = self._to_value_object(datatype, datavalue)
 
-        qualifiers_obj = self._parse_qualifiers(statement.get("qualifiers", {}) or {})
+        qualifiers_obj: List[WikidataClaim] = []
+        if qualifiers:
+            qualifiers_obj = self._parse_qualifiers(statement.get("qualifiers", {}) or {})
         references_obj: List[List[WikidataClaim]] = []
         if include_references:
             references_obj = self._parse_references(statement.get("references", []) or [])
@@ -336,7 +344,7 @@ class JSONNormalizer:
                     dv_val,
                     self.lang,
                 )
-            except (ValueError, TypeError) as e:
+            except (ValueError, TypeError, KeyError, requests.RequestException) as e:
                 if self.debug:
                     print(f"Warning: Failed to parse time value {time_val}: {e}")
                 return None
@@ -376,7 +384,7 @@ class JSONNormalizer:
 
             try:
                 string_val = wikidata_geolocation_to_text(dv_val, self.lang)
-            except (ValueError, TypeError) as e:
+            except (ValueError, TypeError, KeyError, requests.RequestException) as e:
                 if self.debug:
                     print(f"Warning: Failed to parse coordinates ({lat}, {lon}): {e}")
                 return None
