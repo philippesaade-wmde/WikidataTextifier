@@ -93,7 +93,11 @@ async def get_textified_wd(
         entities = {}
         if len(qids) == 1:
             # When one QID is requested, TTL is used
-            entity_data = utils.get_wikidata_ttl_by_id(qids[0], lang=lang)
+            try:
+                entity_data = utils.get_wikidata_ttl_by_id(qids[0], lang=lang)
+            except requests.HTTPError:
+                entity_data = None
+
             if not entity_data:
                 response = "ID not found"
                 raise HTTPException(status_code=404, detail=response)
@@ -117,7 +121,10 @@ async def get_textified_wd(
             }
         else:
             # JSON is used with Action API for bulk retrieval
-            entity_data = utils.get_wikidata_json_by_ids(qids)
+            try:
+                entity_data = utils.get_wikidata_json_by_ids(qids)
+            except requests.HTTPError:
+                entity_data = None
             if not entity_data:
                 response = "IDs not found"
                 raise HTTPException(status_code=404, detail=response)
