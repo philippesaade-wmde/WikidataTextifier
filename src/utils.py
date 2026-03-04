@@ -1,9 +1,16 @@
 import requests
+from requests.adapters import HTTPAdapter
+
 import json
 import html
 import os
 
 REQUEST_TIMEOUT_SECONDS = float(os.environ.get("REQUEST_TIMEOUT_SECONDS", "15"))
+
+SESSION = requests.Session()
+adapter = HTTPAdapter(pool_connections=20, pool_maxsize=20)
+SESSION.mount("http://", adapter)
+SESSION.mount("https://", adapter)
 
 def get_wikidata_ttl_by_id(
         id,
@@ -25,7 +32,7 @@ def get_wikidata_ttl_by_id(
         'User-Agent': 'Wikidata Textifier (embeddings@wikimedia.de)'
     }
 
-    response = requests.get(
+    response = SESSION.get(
         f"https://www.wikidata.org/wiki/Special:EntityData/{id}.ttl",
         params=params,
         headers=headers,
@@ -52,7 +59,7 @@ def get_wikidata_json_by_ids(
 
     if isinstance(ids, str):
         ids = ids.split('|')
-    ids = list(set(ids)) # Ensure unique IDs
+    ids = list(dict.fromkeys(ids))  # Ensure unique IDs
 
     entities_data = {}
 
@@ -72,7 +79,7 @@ def get_wikidata_json_by_ids(
             'User-Agent': 'Wikidata Textifier (embeddings@wikimedia.de)'
         }
 
-        response = requests.get(
+        response = SESSION.get(
             "https://www.wikidata.org/w/api.php?",
             params=params,
             headers=headers,
@@ -116,7 +123,7 @@ def wikidata_time_to_text(value: dict, lang: str = "en"):
         },
     }
 
-    r = requests.post(WIKIBASE_API, data={
+    r = SESSION.post(WIKIBASE_API, data={
         "action": "wbformatvalue",
         "format": "json",
         "uselang": lang,
@@ -148,7 +155,7 @@ def wikidata_geolocation_to_text(value: dict, lang: str = "en"):
         },
     }
 
-    r = requests.post(WIKIBASE_API, data={
+    r = SESSION.post(WIKIBASE_API, data={
         "action": "wbformatvalue",
         "format": "json",
         "uselang": lang,

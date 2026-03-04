@@ -3,6 +3,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi import BackgroundTasks
 import traceback
 import requests
+import time
+import os
 
 from src.Normalizer import TTLNormalizer, JSONNormalizer
 from src.WikidataLabel import WikidataLabel, LazyLabelFactory
@@ -26,6 +28,9 @@ app.add_middleware(
     allow_methods=["GET"],
     allow_headers=["*"],
 )
+
+LABEL_CLEANUP_INTERVAL_SECONDS = int(os.environ.get("LABEL_CLEANUP_INTERVAL_SECONDS", 3600))
+_last_label_cleanup = 0.0
 
 @app.on_event("startup")
 async def startup():
@@ -169,7 +174,11 @@ async def get_textified_wd(
 
             return_data[qid] = results
 
-        background_tasks.add_task(WikidataLabel.delete_old_labels)
+        global _last_label_cleanup
+        if time.time() - _last_label_cleanup > LABEL_CLEANUP_INTERVAL_SECONDS:
+            background_tasks.add_task(WikidataLabel.delete_old_labels)
+            _last_label_cleanup = time.time()
+
         return return_data
 
     except HTTPException:

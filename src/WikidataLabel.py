@@ -2,8 +2,8 @@ from sqlalchemy import Column, String, DateTime, create_engine, text
 from sqlalchemy.dialects.mysql import JSON
 from sqlalchemy.orm import sessionmaker, declarative_base
 
+from .utils import get_wikidata_json_by_ids
 from datetime import datetime, timedelta
-import requests
 import os
 import json
 
@@ -253,38 +253,7 @@ class WikidataLabel(Base):
         Returns:
         - dict: A dictionary mapping each ID to its labels.
         """
-        entities_data = {}
-
-        if isinstance(ids, str):
-            ids = ids.split('|')
-        ids = list(set(ids)) # Ensure unique IDs
-
-        # Wikidata API has a limit on the number of IDs per request, typically 50 for wbgetentities.
-        for chunk_idx in range(0, len(ids), 50):
-
-            ids_chunk = ids[chunk_idx:chunk_idx+50]
-            ids_chunk = "|".join(ids_chunk)
-            params = {
-                'action': 'wbgetentities',
-                'ids': ids_chunk,
-                'props': 'labels',
-                'format': 'json',
-                'origin': '*',
-            }
-            headers = {
-                'User-Agent': 'Wikidata Textifier (embedding@wikimedia.de)'
-            }
-
-            response = requests.get(
-                "https://www.wikidata.org/w/api.php?",
-                params=params,
-                headers=headers,
-                timeout=REQUEST_TIMEOUT_SECONDS,
-            )
-            response.raise_for_status()
-            chunk_data = response.json().get("entities", {})
-            entities_data = entities_data | chunk_data
-
+        entities_data = get_wikidata_json_by_ids(ids, props="labels")
         entities_data = WikidataLabel._compress_labels(entities_data)
         return entities_data
 
