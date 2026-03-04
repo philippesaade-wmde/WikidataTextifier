@@ -97,7 +97,7 @@ class JSONNormalizer:
                 all_ranks=all_ranks,
                 qualifiers=qualifiers
             )
-            if claim_obj and claim_obj.values:
+            if claim_obj is not None and claim_obj.values:
                 claims_out.append(claim_obj)
 
         entity.claims = claims_out
