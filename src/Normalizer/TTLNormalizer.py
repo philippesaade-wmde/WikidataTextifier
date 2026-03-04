@@ -60,6 +60,7 @@ class TTLNormalizer:
         ttl_text: str,
         lang: str = "en",
         fallback_lang: str = "en",
+        label_factory: Optional[LazyLabelFactory] = None,
         debug: bool = False,
     ):
         self.entity_id = entity_id
@@ -70,7 +71,7 @@ class TTLNormalizer:
         self.fallback_lang = fallback_lang
         self.debug = debug
 
-        self.label_factory = LazyLabelFactory(lang=lang, fallback_lang=fallback_lang)
+        self.label_factory = label_factory or LazyLabelFactory(lang=lang, fallback_lang=fallback_lang)
 
     # -------------------------------------------------------------------------
     # Public API

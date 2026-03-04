@@ -5,7 +5,7 @@ import traceback
 import requests
 
 from src.Normalizer import TTLNormalizer, JSONNormalizer
-from src.WikidataLabel import WikidataLabel
+from src.WikidataLabel import WikidataLabel, LazyLabelFactory
 from src import utils
 
 # Start Fastapi app
@@ -89,6 +89,7 @@ async def get_textified_wd(
             filter_pids = [p.strip() for p in pid.split(',')]
 
         qids = [q.strip() for q in id.split(',')]
+        label_factory = LazyLabelFactory(lang=lang, fallback_lang=fallback_lang)
 
         entities = {}
         if len(qids) == 1:
@@ -107,6 +108,7 @@ async def get_textified_wd(
                 ttl_text=entity_data,
                 lang=lang,
                 fallback_lang=fallback_lang,
+                label_factory=label_factory,
                 debug=False,
             )
 
@@ -135,6 +137,7 @@ async def get_textified_wd(
                     entity_json=entity_data[qid],
                     lang=lang,
                     fallback_lang=fallback_lang,
+                    label_factory=label_factory,
                     debug=False,
                 ) if entity_data.get(qid) else None
                 for qid in qids
