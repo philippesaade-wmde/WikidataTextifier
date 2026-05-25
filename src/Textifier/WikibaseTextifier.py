@@ -379,6 +379,7 @@ class WikibaseClaimValue:
             s += f" | {' | '.join(q_lines)}"
         return s
 
+
 __all__ = [
     "LANGUAGE_VARIABLES",
     "LANGUAGE_VARIABLES_PATH",
@@ -389,5 +390,5 @@ __all__ = [
     "WikibaseQuantity",
     "WikibaseEntity",
     "WikibaseClaim",
-    "WikibaseClaimValue"
+    "WikibaseClaimValue",
 ]
