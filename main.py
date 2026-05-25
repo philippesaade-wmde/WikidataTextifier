@@ -10,12 +10,12 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from src import utils
 from src.Normalizer import JSONNormalizer
-from src.WikidataLabel import LazyLabelFactory, WikidataLabel
+from src.WikibaseLabel import LazyLabelFactory, WikibaseLabel
 
 # Start Fastapi app
 app = FastAPI(
-    title="Wikidata Textifier",
-    description="Transforms Wikidata entities into text representations.",
+    title="Wikibase Textifier",
+    description="Transforms Wikidata/Wikibase entities into text representations.",
     version="1.0.0",
     docs_url="/docs",  # Change the Swagger UI path if needed
     redoc_url="/redoc",  # Change the ReDoc path if needed
@@ -38,7 +38,7 @@ _last_label_cleanup = 0.0
 @app.on_event("startup")
 async def startup():
     """Initialize database resources required by the API."""
-    WikidataLabel.initialize_database()
+    WikibaseLabel.initialize_database()
 
 
 @app.get(
@@ -128,7 +128,7 @@ async def get_textified_wd(
         # JSON is used with Action API for bulk retrieval
         entities = {}
         try:
-            entity_data = utils.get_wikidata_json_by_ids(qids, action_api_url=action_api_url)
+            entity_data = utils.get_wikibase_json_by_ids(qids, action_api_url=action_api_url)
         except requests.HTTPError:
             entity_data = None
         if not entity_data:
@@ -179,7 +179,7 @@ async def get_textified_wd(
 
         global _last_label_cleanup
         if time.time() - _last_label_cleanup > LABEL_CLEANUP_INTERVAL_SECONDS:
-            background_tasks.add_task(WikidataLabel.delete_old_labels)
+            background_tasks.add_task(WikibaseLabel.delete_old_labels)
             _last_label_cleanup = time.time()
 
         return return_data

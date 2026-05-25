@@ -6,7 +6,7 @@ Covers route wiring behavior for single and multi-entity requests.
 from fastapi import BackgroundTasks
 
 import main
-from src.Textifier.WikidataTextifier import WikidataEntity
+from src.Textifier.WikibaseTextifier import WikibaseEntity
 
 
 def test_get_textified_wd_uses_json_normalizer_for_single_qid(monkeypatch, run_async, make_request):
@@ -15,7 +15,7 @@ def test_get_textified_wd_uses_json_normalizer_for_single_qid(monkeypatch, run_a
 
     def fake_get_json(
         ids,
-        action_api_url="https://www.wikidata.org/w/api.php",
+        action_api_url="https://example.wikibase.local/w/api.php",
         props="labels|descriptions|aliases|claims",
     ):
         calls["requested_ids"] = ids
@@ -33,9 +33,9 @@ def test_get_textified_wd_uses_json_normalizer_for_single_qid(monkeypatch, run_a
             calls["normalizer_entity_id"] = self.entity_id
 
         def normalize(self, **kwargs):
-            return WikidataEntity(id=self.entity_id, label="Douglas Adams", claims=[])
+            return WikibaseEntity(id=self.entity_id, label="Douglas Adams", claims=[])
 
-    monkeypatch.setattr(main.utils, "get_wikidata_json_by_ids", fake_get_json)
+    monkeypatch.setattr(main.utils, "get_wikibase_json_by_ids", fake_get_json)
     monkeypatch.setattr(main, "JSONNormalizer", DummyJSONNormalizer)
 
     result = run_async(
@@ -62,7 +62,7 @@ def test_get_textified_wd_uses_json_normalizer_for_multiple_qids(monkeypatch, ru
 
     def fake_get_json(
         ids,
-        action_api_url="https://www.wikidata.org/w/api.php",
+        action_api_url="https://example.wikibase.local/w/api.php",
         props="labels|descriptions|aliases|claims",
     ):
         del action_api_url, props
@@ -79,9 +79,9 @@ def test_get_textified_wd_uses_json_normalizer_for_multiple_qids(monkeypatch, ru
             init_calls.append(self.entity_id)
 
         def normalize(self, **kwargs):
-            return WikidataEntity(id=self.entity_id, label=f"Label-{self.entity_id}", claims=[])
+            return WikibaseEntity(id=self.entity_id, label=f"Label-{self.entity_id}", claims=[])
 
-    monkeypatch.setattr(main.utils, "get_wikidata_json_by_ids", fake_get_json)
+    monkeypatch.setattr(main.utils, "get_wikibase_json_by_ids", fake_get_json)
     monkeypatch.setattr(main, "JSONNormalizer", DummyJSONNormalizer)
 
     result = run_async(

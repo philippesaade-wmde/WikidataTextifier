@@ -13,7 +13,7 @@ This folder contains automated tests split into two layers:
 - JSON normalizer behavior (rank filtering, datatype conversion, external-id filtering).
 - Textifier model behavior (serialization, triplet/text rendering, truthiness rules).
 - Utility helpers (`src/utils.py`) with mocked HTTP calls.
-- Label helper behavior (`src/WikidataLabel.py`) including language fallback and lazy resolution.
+- Label helper behavior (`src/WikibaseLabel.py`) including language fallback and lazy resolution.
 
 ### Integration (`tests/integration`)
 

@@ -6,18 +6,18 @@ from typing import Any, Dict, List, Optional
 
 import requests
 
-from ..Textifier.WikidataTextifier import (
-    WikidataClaim,
-    WikidataClaimValue,
-    WikidataCoordinates,
-    WikidataEntity,
-    WikidataMonolingualText,
-    WikidataQuantity,
-    WikidataText,
-    WikidataTime,
+from ..Textifier.WikibaseTextifier import (
+    WikibaseClaim,
+    WikibaseClaimValue,
+    WikibaseCoordinates,
+    WikibaseEntity,
+    WikibaseMonolingualText,
+    WikibaseQuantity,
+    WikibaseText,
+    WikibaseTime,
 )
-from ..utils import wikidata_geolocation_to_text, wikidata_time_to_text
-from ..WikidataLabel import LazyLabelFactory, WikidataLabel
+from ..utils import wikibase_geolocation_to_text, wikibase_time_to_text
+from ..WikibaseLabel import LazyLabelFactory, WikibaseLabel
 
 
 class JSONNormalizer:
@@ -62,8 +62,8 @@ class JSONNormalizer:
         all_ranks: bool = False,
         qualifiers: bool = True,
         filter_pids: List[str] = [],
-    ) -> WikidataEntity:
-        """Normalize the entity JSON payload into a ``WikidataEntity`` tree.
+    ) -> WikibaseEntity:
+        """Normalize the entity JSON payload into a ``WikibaseEntity`` tree.
 
         Args:
             external_ids (bool): Whether to include ``external-id`` datatype claims.
@@ -73,19 +73,19 @@ class JSONNormalizer:
             filter_pids (list[str]): Optional allow-list of property IDs to keep.
 
         Returns:
-            WikidataEntity: Parsed entity object with claims and values.
+            WikibaseEntity: Parsed entity object with claims and values.
         """
         e = self.entity_json
         if not isinstance(e, dict) or "labels" not in e:
             if self.debug:
                 print(f"Bad entity_json: missing labels for item {self.entity_id}")
 
-        label = WikidataLabel.get_lang_val(
+        label = WikibaseLabel.get_lang_val(
             e.get("labels", {}) or {},
             lang=self.lang,
             fallback_lang=self.fallback_lang,
         )
-        description = WikidataLabel.get_lang_val(
+        description = WikibaseLabel.get_lang_val(
             e.get("descriptions", {}) or {},
             lang=self.lang,
             fallback_lang=self.fallback_lang,
@@ -95,7 +95,7 @@ class JSONNormalizer:
         aliases = (aliases_dict.get(self.lang, []) or []) + (aliases_dict.get("mul", []) or [])
         aliases = list({a.get("value") if isinstance(a, dict) else str(a) for a in aliases if a})
 
-        entity = WikidataEntity(
+        entity = WikibaseEntity(
             id=self.entity_id,
             label=label,
             description=description,
@@ -104,7 +104,7 @@ class JSONNormalizer:
         )
 
         claims_in = e.get("claims", {}) or {}
-        claims_out: List[WikidataClaim] = []
+        claims_out: List[WikibaseClaim] = []
         for pid, statements in claims_in.items():
             if not (isinstance(pid, str) and pid.startswith("P") and isinstance(statements, list)):
                 continue
@@ -139,30 +139,30 @@ class JSONNormalizer:
     def _build_claim(
         self,
         *,
-        subject: WikidataEntity,
+        subject: WikibaseEntity,
         pid: str,
         statements: List[Dict[str, Any]],
         external_ids: bool,
         include_references: bool,
         all_ranks: bool,
         qualifiers: bool,
-    ) -> Optional[WikidataClaim]:
+    ) -> Optional[WikibaseClaim]:
         datatype = self._claim_datatype_from_statements(statements) or "string"
         if (not external_ids) and datatype == "external-id":
             return None
 
-        prop_ent = WikidataEntity(
+        prop_ent = WikibaseEntity(
             id=pid,
             label=self.label_factory.create(pid),
             description=None,
             aliases=[],
             claims=[],
         )
-        claim = WikidataClaim(subject=subject, property=prop_ent, values=[], datatype=datatype)
+        claim = WikibaseClaim(subject=subject, property=prop_ent, values=[], datatype=datatype)
 
         kept = self._filter_by_rank(statements, all_ranks=all_ranks)
 
-        values: List[WikidataClaimValue] = []
+        values: List[WikibaseClaimValue] = []
         for st in kept:
             if not isinstance(st, dict):
                 continue
@@ -214,12 +214,12 @@ class JSONNormalizer:
     def _build_claim_value(
         self,
         *,
-        claim: WikidataClaim,
+        claim: WikibaseClaim,
         statement: Dict[str, Any],
         datatype: str,
         include_references: bool,
         qualifiers: bool,
-    ) -> Optional[WikidataClaimValue]:
+    ) -> Optional[WikibaseClaimValue]:
         mainsnak = statement.get("mainsnak", statement)
         if not isinstance(mainsnak, dict):
             return None
@@ -227,7 +227,7 @@ class JSONNormalizer:
         snaktype = mainsnak.get("snaktype", "value")
         if snaktype != "value":
             # somevalue/novalue
-            return WikidataClaimValue(
+            return WikibaseClaimValue(
                 claim=claim,
                 value=None,
                 qualifiers=[],
@@ -238,17 +238,17 @@ class JSONNormalizer:
         datavalue = mainsnak.get("datavalue")
         value_obj = self._to_value_object(datatype, datavalue)
 
-        qualifiers_obj: List[WikidataClaim] = []
+        qualifiers_obj: List[WikibaseClaim] = []
         if qualifiers:
             qualifiers_obj = self._parse_qualifiers(statement.get("qualifiers", {}) or {})
-        references_obj: List[List[WikidataClaim]] = []
+        references_obj: List[List[WikibaseClaim]] = []
         if include_references:
             references_obj = self._parse_references(statement.get("references", []) or [])
 
         if self.debug:
             print(f"{claim.property.id}: {datavalue} (snaktype={snaktype})")
 
-        return WikidataClaimValue(
+        return WikibaseClaimValue(
             claim=claim,
             value=value_obj,
             qualifiers=qualifiers_obj,
@@ -260,16 +260,16 @@ class JSONNormalizer:
     # Qualifiers and references
     # -------------------------------------------------------------------------
 
-    def _parse_qualifiers(self, qualifiers: Dict[str, Any]) -> List[WikidataClaim]:
-        out: List[WikidataClaim] = []
+    def _parse_qualifiers(self, qualifiers: Dict[str, Any]) -> List[WikibaseClaim]:
+        out: List[WikibaseClaim] = []
         for qpid, snaks in qualifiers.items():
             if not (isinstance(qpid, str) and qpid.startswith("P") and isinstance(snaks, list)):
                 continue
             out.append(self._build_snak_claim(pid=qpid, snaks=snaks, dummy_subject_id="<qualifier>"))
         return out
 
-    def _parse_references(self, references: List[Dict[str, Any]]) -> List[List[WikidataClaim]]:
-        out: List[List[WikidataClaim]] = []
+    def _parse_references(self, references: List[Dict[str, Any]]) -> List[List[WikibaseClaim]]:
+        out: List[List[WikibaseClaim]] = []
         for ref in references:
             if not isinstance(ref, dict):
                 continue
@@ -277,7 +277,7 @@ class JSONNormalizer:
             if not isinstance(snaks, dict):
                 continue
 
-            ref_claims: List[WikidataClaim] = []
+            ref_claims: List[WikibaseClaim] = []
             for rpid, r_snaks in snaks.items():
                 if not (isinstance(rpid, str) and rpid.startswith("P") and isinstance(r_snaks, list)):
                     continue
@@ -286,31 +286,31 @@ class JSONNormalizer:
             out.append(ref_claims)
         return out
 
-    def _build_snak_claim(self, *, pid: str, snaks: List[Dict[str, Any]], dummy_subject_id: str) -> WikidataClaim:
-        prop_ent = WikidataEntity(
+    def _build_snak_claim(self, *, pid: str, snaks: List[Dict[str, Any]], dummy_subject_id: str) -> WikibaseClaim:
+        prop_ent = WikibaseEntity(
             id=pid,
             label=self.label_factory.create(pid),
             description=None,
             aliases=[],
             claims=[],
         )
-        dummy_subject = WikidataEntity(id=dummy_subject_id, label=None, description=None, aliases=[], claims=[])
+        dummy_subject = WikibaseEntity(id=dummy_subject_id, label=None, description=None, aliases=[], claims=[])
 
         datatype = self._datatype_from_snaks(snaks) or "string"
-        claim = WikidataClaim(subject=dummy_subject, property=prop_ent, values=[], datatype=datatype)
+        claim = WikibaseClaim(subject=dummy_subject, property=prop_ent, values=[], datatype=datatype)
 
-        vals: List[WikidataClaimValue] = []
+        vals: List[WikibaseClaimValue] = []
         for snak in snaks:
             if not isinstance(snak, dict):
                 continue
             snaktype = snak.get("snaktype", "value")
             if snaktype != "value":
-                vals.append(WikidataClaimValue(claim=claim, value=None, qualifiers=[], references=[], rank=None))
+                vals.append(WikibaseClaimValue(claim=claim, value=None, qualifiers=[], references=[], rank=None))
                 continue
 
             dv = snak.get("datavalue")
             vobj = self._to_value_object(datatype, dv)
-            vals.append(WikidataClaimValue(claim=claim, value=vobj, qualifiers=[], references=[], rank=None))
+            vals.append(WikibaseClaimValue(claim=claim, value=vobj, qualifiers=[], references=[], rank=None))
 
         claim.values = vals
         return claim
@@ -345,14 +345,14 @@ class JSONNormalizer:
             if isinstance(dv_val, dict):
                 eid = dv_val.get("id")
             if isinstance(eid, str) and eid.startswith(("Q", "P")):
-                return WikidataEntity(
+                return WikibaseEntity(
                     id=eid,
                     label=self.label_factory.create(eid),
                     description=None,
                     aliases=[],
                     claims=[],
                 )
-            return WikidataText(text=str(dv_val))
+            return WikibaseText(text=str(dv_val))
 
         # Time
         if dv_type == "time" or datatype == "time":
@@ -366,7 +366,7 @@ class JSONNormalizer:
             cal_id = calendarmodel.rsplit("/", 1)[-1] if isinstance(calendarmodel, str) else "Q1985786"
 
             try:
-                string_val = wikidata_time_to_text(
+                string_val = wikibase_time_to_text(
                     dv_val,
                     self.lang,
                 )
@@ -375,7 +375,7 @@ class JSONNormalizer:
                     print(f"Warning: Failed to parse time value {time_val}: {e}")
                 return None
 
-            return WikidataTime(
+            return WikibaseTime(
                 time=time_val,
                 precision=dv_val.get("precision"),
                 calendarmodel=cal_id,
@@ -398,7 +398,7 @@ class JSONNormalizer:
                 if unit_id.startswith("Q"):
                     unit_label = self.label_factory.create(unit_id)
 
-            return WikidataQuantity(amount=str(amount), unit=unit_label, unit_id=unit_id)
+            return WikibaseQuantity(amount=str(amount), unit=unit_label, unit_id=unit_id)
 
         if dv_type == "globe-coordinate" or datatype == "globe-coordinate":
             if not isinstance(dv_val, dict):
@@ -409,13 +409,13 @@ class JSONNormalizer:
                 return None
 
             try:
-                string_val = wikidata_geolocation_to_text(dv_val, self.lang)
+                string_val = wikibase_geolocation_to_text(dv_val, self.lang)
             except (ValueError, TypeError, KeyError, requests.RequestException) as e:
                 if self.debug:
                     print(f"Warning: Failed to parse coordinates ({lat}, {lon}): {e}")
                 return None
 
-            return WikidataCoordinates(latitude=lat, longitude=lon, string_val=string_val)
+            return WikibaseCoordinates(latitude=lat, longitude=lon, string_val=string_val)
 
         # Monolingual text
         if dv_type == "monolingualtext" or datatype == "monolingualtext":
@@ -423,7 +423,7 @@ class JSONNormalizer:
                 return None
             txt = dv_val.get("text")
             lg = dv_val.get("language")
-            return WikidataMonolingualText(text=str(txt) if txt is not None else "", lang=lg)
+            return WikibaseMonolingualText(text=str(txt) if txt is not None else "", lang=lg)
 
         # Default string-like
-        return WikidataText(text=str(dv_val) if dv_val is not None else None)
+        return WikibaseText(text=str(dv_val) if dv_val is not None else None)

@@ -25,7 +25,7 @@ class _FakeResponse:
         return self._payload
 
 
-def test_get_wikidata_ttl_by_id_returns_response_text(monkeypatch):
+def test_get_wikibase_ttl_by_id_returns_response_text(monkeypatch):
     """It should return the raw TTL text for a requested entity."""
 
     def fake_get(url, params, headers, timeout):
@@ -33,12 +33,12 @@ def test_get_wikidata_ttl_by_id_returns_response_text(monkeypatch):
 
     monkeypatch.setattr(utils.SESSION, "get", fake_get)
 
-    result = utils.get_wikidata_ttl_by_id("Q42", lang="en")
+    result = utils.get_wikibase_ttl_by_id("Q42", lang="en")
 
     assert result == "ttl-content"
 
 
-def test_get_wikidata_json_by_ids_deduplicates_and_chunks(monkeypatch):
+def test_get_wikibase_json_by_ids_deduplicates_and_chunks(monkeypatch):
     """It should deduplicate IDs and split requests in chunks of 50."""
     captured_chunks = []
 
@@ -51,7 +51,7 @@ def test_get_wikidata_json_by_ids_deduplicates_and_chunks(monkeypatch):
     monkeypatch.setattr(utils.SESSION, "get", fake_get)
 
     ids = [f"Q{i}" for i in range(1, 55)] + ["Q1"]  # 54 unique IDs
-    result = utils.get_wikidata_json_by_ids(ids)
+    result = utils.get_wikibase_json_by_ids(ids)
 
     assert len(captured_chunks) == 2
     assert len(captured_chunks[0]) == 50
@@ -61,7 +61,7 @@ def test_get_wikidata_json_by_ids_deduplicates_and_chunks(monkeypatch):
     assert "Q54" in result
 
 
-def test_wikidata_time_to_text_normalizes_time_before_api_call(monkeypatch):
+def test_wikibase_time_to_text_normalizes_time_before_api_call(monkeypatch):
     """It should normalize time payloads before posting to formatter API."""
     captured = {}
 
@@ -71,13 +71,13 @@ def test_wikidata_time_to_text_normalizes_time_before_api_call(monkeypatch):
 
     monkeypatch.setattr(utils.SESSION, "post", fake_post)
 
-    result = utils.wikidata_time_to_text({"time": "2024-01-01T00:00:00+00:00"}, lang="en")
+    result = utils.wikibase_time_to_text({"time": "2024-01-01T00:00:00+00:00"}, lang="en")
 
     assert result == "1 January 2024"
     assert captured["datavalue"]["value"]["time"] == "+2024-01-01T00:00:00Z"
 
 
-def test_wikidata_time_to_text_raises_for_missing_result(monkeypatch):
+def test_wikibase_time_to_text_raises_for_missing_result(monkeypatch):
     """It should raise ``ValueError`` when formatter response has no result field."""
 
     def fake_post(url, data, timeout):
@@ -86,10 +86,10 @@ def test_wikidata_time_to_text_raises_for_missing_result(monkeypatch):
     monkeypatch.setattr(utils.SESSION, "post", fake_post)
 
     with pytest.raises(ValueError):
-        utils.wikidata_time_to_text({"time": "+2024-01-01T00:00:00Z"}, lang="en")
+        utils.wikibase_time_to_text({"time": "+2024-01-01T00:00:00Z"}, lang="en")
 
 
-def test_wikidata_geolocation_to_text_raises_for_missing_result(monkeypatch):
+def test_wikibase_geolocation_to_text_raises_for_missing_result(monkeypatch):
     """It should raise ``ValueError`` when coordinate formatter response is malformed."""
 
     def fake_post(url, data, timeout):
@@ -98,4 +98,4 @@ def test_wikidata_geolocation_to_text_raises_for_missing_result(monkeypatch):
     monkeypatch.setattr(utils.SESSION, "post", fake_post)
 
     with pytest.raises(ValueError):
-        utils.wikidata_geolocation_to_text({"latitude": 1.0, "longitude": 2.0}, lang="en")
+        utils.wikibase_geolocation_to_text({"latitude": 1.0, "longitude": 2.0}, lang="en")

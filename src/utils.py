@@ -8,7 +8,7 @@ import requests
 from requests.adapters import HTTPAdapter
 
 REQUEST_TIMEOUT_SECONDS = float(os.environ.get("REQUEST_TIMEOUT_SECONDS", "15"))
-USER_AGENT = os.environ.get("USER_AGENT", "Wikidata Textifier (embeddings@wikimedia.de)")
+USER_AGENT = os.environ.get("USER_AGENT", "Wikibase Textifier (embeddings@wikimedia.de)")
 
 SESSION = requests.Session()
 adapter = HTTPAdapter(pool_connections=20, pool_maxsize=20)
@@ -16,7 +16,7 @@ SESSION.mount("http://", adapter)
 SESSION.mount("https://", adapter)
 
 
-def get_wikidata_ttl_by_id(
+def get_wikibase_ttl_by_id(
     id,
     wb_url="https://www.wikidata.org",
     lang="en",
@@ -49,7 +49,7 @@ def get_wikidata_ttl_by_id(
     return response.text
 
 
-def get_wikidata_json_by_ids(
+def get_wikibase_json_by_ids(
     ids,
     action_api_url="https://www.wikidata.org/w/api.php",
     props="labels|descriptions|aliases|claims",
@@ -104,7 +104,7 @@ def get_wikidata_json_by_ids(
 #####################################
 
 
-def wikidata_time_to_text(value: dict, lang: str = "en"):
+def wikibase_time_to_text(value: dict, lang: str = "en"):
     """Format a time datavalue into localized display text using a local Wikibase instance.
 
     Args:
@@ -159,7 +159,7 @@ def wikidata_time_to_text(value: dict, lang: str = "en"):
     return html.unescape(data["result"])
 
 
-def wikidata_geolocation_to_text(value: dict, lang: str = "en"):
+def wikibase_geolocation_to_text(value: dict, lang: str = "en"):
     """Format a globe-coordinate value into localized display text using a local Wikibase instance.
 
     Args:
@@ -203,3 +203,8 @@ def wikidata_geolocation_to_text(value: dict, lang: str = "en"):
     if "result" not in data:
         raise ValueError("Missing 'result' in wbformatvalue response")
     return html.unescape(data["result"])
+
+
+# Backward compatibility aliases.
+wikidata_time_to_text = wikibase_time_to_text
+wikidata_geolocation_to_text = wikibase_geolocation_to_text

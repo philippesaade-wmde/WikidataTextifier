@@ -1,7 +1,7 @@
 [project]
 name = "WikidataTextifier"
 version = "0.1.0"
-description = "Transforms Wikidata entities into text representations."
+description = "Transforms Wikidata/Wikibase entities into text representations."
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
@@ -38,7 +38,7 @@ convention = "google"
 
 [tool.ruff.lint.isort]
 known-first-party = [
-    "wikidatasearch"
+    "wikidatatextifier",
 ]
 
 [tool.pytest.ini_options]
