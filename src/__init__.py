@@ -1,7 +1,13 @@
-"""Public package exports for Wikidata textification primitives."""
+"""Public package exports for Wikidata/Wikibase textification primitives."""
 
 from .Normalizer import JSONNormalizer, TTLNormalizer
 from .Textifier import (
+    WikibaseClaim,
+    WikibaseClaimValue,
+    WikibaseCoordinates,
+    WikibaseEntity,
+    WikibaseQuantity,
+    WikibaseTime,
     WikidataClaim,
     WikidataClaimValue,
     WikidataCoordinates,
@@ -10,27 +16,39 @@ from .Textifier import (
     WikidataTime,
 )
 from .utils import (
-    get_wikidata_json_by_ids,
-    get_wikidata_ttl_by_id,
+    get_wikibase_json_by_ids,
+    get_wikibase_ttl_by_id,
+    wikibase_geolocation_to_text,
+    wikibase_time_to_text,
     wikidata_geolocation_to_text,
     wikidata_time_to_text,
 )
-from .WikidataLabel import LazyLabel, LazyLabelFactory, WikidataLabel
+from .WikibaseLabel import LazyLabel, LazyLabelFactory, WikibaseLabel
+from .WikidataLabel import WikidataLabel
 
 __all__ = [
     "JSONNormalizer",
     "TTLNormalizer",
+    "WikibaseClaim",
+    "WikibaseClaimValue",
+    "WikibaseCoordinates",
+    "WikibaseEntity",
+    "WikibaseQuantity",
+    "WikibaseTime",
     "WikidataClaim",
     "WikidataClaimValue",
     "WikidataCoordinates",
     "WikidataEntity",
+    "WikibaseLabel",
     "WikidataLabel",
     "WikidataQuantity",
     "WikidataTime",
     "LazyLabel",
     "LazyLabelFactory",
-    "get_wikidata_json_by_ids",
-    "get_wikidata_ttl_by_id",
+    "get_wikibase_json_by_ids",
+    "get_wikibase_ttl_by_id",
+    "wikibase_geolocation_to_text",
+    "wikibase_time_to_text",
     "wikidata_geolocation_to_text",
     "wikidata_time_to_text",
 ]

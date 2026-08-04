@@ -6,7 +6,7 @@ Covers claim filtering and datavalue conversion behavior for key datatypes.
 from importlib import import_module
 
 from src.Normalizer.JSONNormalizer import JSONNormalizer
-from src.Textifier.WikidataTextifier import WikidataQuantity, WikidataText
+from src.Textifier.WikibaseTextifier import WikibaseMonolingualText, WikibaseQuantity
 
 json_normalizer_module = import_module("src.Normalizer.JSONNormalizer")
 
@@ -105,19 +105,19 @@ def test_to_value_object_quantity_resolves_unit_label():
             "type": "quantity",
             "value": {
                 "amount": "+10",
-                "unit": "http://www.wikidata.org/entity/Q11573",
+                "unit": "https://example.wikibase.local/entity/Q11573",
             },
         },
     )
 
-    assert isinstance(quantity, WikidataQuantity)
+    assert isinstance(quantity, WikibaseQuantity)
     assert quantity.unit_id == "Q11573"
     assert quantity.unit == "label-Q11573"
     assert "Q11573" in factory.requested_ids
 
 
-def test_to_value_object_monolingual_text_ignores_other_languages():
-    """It should return empty monolingual text when language does not match target ``lang``."""
+def test_to_value_object_monolingual_text_preserves_language_and_text():
+    """It should keep monolingual text payload regardless of target language."""
     normalizer = JSONNormalizer(
         entity_id="Q42",
         entity_json=_base_entity_json(),
@@ -130,8 +130,9 @@ def test_to_value_object_monolingual_text_ignores_other_languages():
         {"type": "monolingualtext", "value": {"text": "Bonjour", "language": "fr"}},
     )
 
-    assert isinstance(value, WikidataText)
-    assert value.text is None
+    assert isinstance(value, WikibaseMonolingualText)
+    assert value.text == "Bonjour"
+    assert value.lang == "fr"
 
 
 def test_to_value_object_time_returns_none_when_formatter_fails(monkeypatch):
@@ -140,7 +141,7 @@ def test_to_value_object_time_returns_none_when_formatter_fails(monkeypatch):
     def fake_time_formatter(value, lang):
         raise ValueError("cannot format")
 
-    monkeypatch.setattr(json_normalizer_module, "wikidata_time_to_text", fake_time_formatter)
+    monkeypatch.setattr(json_normalizer_module, "wikibase_time_to_text", fake_time_formatter)
 
     normalizer = JSONNormalizer(
         entity_id="Q42",
@@ -156,7 +157,7 @@ def test_to_value_object_time_returns_none_when_formatter_fails(monkeypatch):
             "value": {
                 "time": "+2024-01-01T00:00:00Z",
                 "precision": 11,
-                "calendarmodel": "http://www.wikidata.org/entity/Q1985786",
+                "calendarmodel": "https://example.wikibase.local/entity/Q1985786",
             },
         },
     )

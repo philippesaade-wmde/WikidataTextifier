@@ -9,18 +9,18 @@ import requests
 from rdflib import Graph, Literal, Namespace, URIRef
 from rdflib.namespace import RDF, RDFS
 
-from ..Textifier.WikidataTextifier import (
-    WikidataClaim,
-    WikidataClaimValue,
-    WikidataCoordinates,
-    WikidataEntity,
-    WikidataMonolingualText,
-    WikidataQuantity,
-    WikidataText,
-    WikidataTime,
+from ..Textifier.WikibaseTextifier import (
+    WikibaseClaim,
+    WikibaseClaimValue,
+    WikibaseCoordinates,
+    WikibaseEntity,
+    WikibaseMonolingualText,
+    WikibaseQuantity,
+    WikibaseText,
+    WikibaseTime,
 )
-from ..utils import wikidata_geolocation_to_text, wikidata_time_to_text
-from ..WikidataLabel import LazyLabelFactory, WikidataLabel
+from ..utils import wikibase_geolocation_to_text, wikibase_time_to_text
+from ..WikibaseLabel import LazyLabelFactory, WikibaseLabel
 
 # Namespaces used by Wikidata TTL
 WD = Namespace("http://www.wikidata.org/entity/")
@@ -96,8 +96,8 @@ class TTLNormalizer:
         all_ranks: bool = False,
         qualifiers: bool = True,
         filter_pids: List[str] = [],
-    ) -> WikidataEntity:
-        """Normalize the parsed graph into a ``WikidataEntity`` tree.
+    ) -> WikibaseEntity:
+        """Normalize the parsed graph into a ``WikibaseEntity`` tree.
 
         Args:
             external_ids (bool): Whether to include ``external-id`` datatype claims.
@@ -107,19 +107,19 @@ class TTLNormalizer:
             filter_pids (list[str]): Optional allow-list of property IDs to keep.
 
         Returns:
-            WikidataEntity: Parsed entity object with claims and values.
+            WikibaseEntity: Parsed entity object with claims and values.
         """
         # Preload labels found inside TTL so LazyLabelFactory can avoid lookups.
         self.label_factory._resolved_labels = self._build_label_cache_from_ttl()
 
         subj = WD[self.entity_id]
 
-        label = WikidataLabel.get_lang_val(
+        label = WikibaseLabel.get_lang_val(
             self._lang_value_map(subj, RDFS.label),
             lang=self.lang,
             fallback_lang=self.fallback_lang,
         )
-        description = WikidataLabel.get_lang_val(
+        description = WikibaseLabel.get_lang_val(
             self._lang_value_map(subj, SCHEMA.description),
             lang=self.lang,
             fallback_lang=self.fallback_lang,
@@ -138,7 +138,7 @@ class TTLNormalizer:
             filter_pids=filter_pids,
         )
 
-        entity = WikidataEntity(
+        entity = WikibaseEntity(
             id=self.entity_id,
             label=label,
             description=description,
@@ -179,7 +179,7 @@ class TTLNormalizer:
             if labels:
                 label_cache[sid] = {"labels": labels}
 
-        return WikidataLabel._compress_labels(label_cache)
+        return WikibaseLabel._compress_labels(label_cache)
 
     # -------------------------------------------------------------------------
     # Claim extraction
@@ -299,13 +299,13 @@ class TTLNormalizer:
     def _build_claim_object(
         self,
         *,
-        subject: WikidataEntity,
+        subject: WikibaseEntity,
         pid: str,
         statements: List[Dict[str, Any]],
         include_references: bool,
         qualifiers: bool = True,
-    ) -> WikidataClaim:
-        prop_ent = WikidataEntity(
+    ) -> WikibaseClaim:
+        prop_ent = WikibaseEntity(
             id=pid,
             label=self.label_factory.create(pid),
             description=None,
@@ -314,15 +314,15 @@ class TTLNormalizer:
         )
 
         datatype = statements[0].get("datatype") or "string"
-        claim = WikidataClaim(subject=subject, property=prop_ent, values=[], datatype=datatype)
+        claim = WikibaseClaim(subject=subject, property=prop_ent, values=[], datatype=datatype)
 
-        values: List[WikidataClaimValue] = []
+        values: List[WikibaseClaimValue] = []
         for st in statements:
             if self.debug:
                 print(f"{pid}: {st.get('main')} (special: {st.get('is_special_value', False)})")
 
             value_obj = self._to_value_object(st["datatype"], st.get("main"))
-            qualifiers_obj: List[WikidataClaim] = []
+            qualifiers_obj: List[WikibaseClaim] = []
 
             if qualifiers:
                 qualifiers_obj = [
@@ -334,7 +334,7 @@ class TTLNormalizer:
                     for qpid, qsnaks in (st.get("qualifiers") or {}).items()
                 ]
 
-            refs_obj: List[List[WikidataClaim]] = []
+            refs_obj: List[List[WikibaseClaim]] = []
             if include_references:
                 for ref in st.get("references") or []:
                     ref_claims = [
@@ -348,7 +348,7 @@ class TTLNormalizer:
                     refs_obj.append(ref_claims)
 
             values.append(
-                WikidataClaimValue(
+                WikibaseClaimValue(
                     claim=claim,
                     value=value_obj,
                     qualifiers=qualifiers_obj,
@@ -360,8 +360,8 @@ class TTLNormalizer:
         claim.values = values
         return claim
 
-    def _build_snak_claim(self, *, pid: str, datatype: str, snaks: List[Dict[str, Any]]) -> WikidataClaim:
-        prop_ent = WikidataEntity(
+    def _build_snak_claim(self, *, pid: str, datatype: str, snaks: List[Dict[str, Any]]) -> WikibaseClaim:
+        prop_ent = WikibaseEntity(
             id=pid,
             label=self.label_factory.create(pid),
             description=None,
@@ -369,15 +369,15 @@ class TTLNormalizer:
             claims=[],
         )
 
-        dummy_subject = WikidataEntity(id="<snak>", label=None, description=None, aliases=[], claims=[])
-        claim = WikidataClaim(subject=dummy_subject, property=prop_ent, values=[], datatype=datatype)
+        dummy_subject = WikibaseEntity(id="<snak>", label=None, description=None, aliases=[], claims=[])
+        claim = WikibaseClaim(subject=dummy_subject, property=prop_ent, values=[], datatype=datatype)
 
-        vals: List[WikidataClaimValue] = []
+        vals: List[WikibaseClaimValue] = []
         for snak in snaks:
             if self.debug:
                 print(f"  {pid}: {snak.get('value')}")
             v_obj = self._to_value_object(datatype, snak.get("value"))
-            vals.append(WikidataClaimValue(claim=claim, value=v_obj, qualifiers=[], references=[], rank=None))
+            vals.append(WikibaseClaimValue(claim=claim, value=v_obj, qualifiers=[], references=[], rank=None))
 
         claim.values = vals
         return claim
@@ -392,14 +392,14 @@ class TTLNormalizer:
 
         if datatype == "wikibase-item":
             if isinstance(parsed, str) and parsed.startswith("Q"):
-                return WikidataEntity(
+                return WikibaseEntity(
                     id=parsed,
                     label=self.label_factory.create(parsed),
                     description=None,
                     aliases=[],
                     claims=[],
                 )
-            return WikidataText(text=str(parsed))
+            return WikibaseText(text=str(parsed))
 
         if datatype == "quantity":
             if not isinstance(parsed, dict):
@@ -420,7 +420,7 @@ class TTLNormalizer:
                 if unit_id.startswith("Q"):
                     unit_label = self.label_factory.create(unit_id)
 
-            return WikidataQuantity(amount=amount, unit=unit_label, unit_id=unit_id)
+            return WikibaseQuantity(amount=amount, unit=unit_label, unit_id=unit_id)
 
         if datatype == "time":
             if not isinstance(parsed, dict):
@@ -438,7 +438,7 @@ class TTLNormalizer:
             cal_id = calendarmodel.rsplit("/", 1)[-1] if isinstance(calendarmodel, str) else "Q1985786"
 
             try:
-                string_val = wikidata_time_to_text(
+                string_val = wikibase_time_to_text(
                     parsed,
                     self.lang,
                 )
@@ -447,7 +447,7 @@ class TTLNormalizer:
                     print(f"Warning: Failed to parse time value {time_val}: {e}")
                 return None
 
-            return WikidataTime(
+            return WikibaseTime(
                 time=time_val,
                 precision=parsed.get("precision"),
                 calendarmodel=cal_id,
@@ -468,20 +468,20 @@ class TTLNormalizer:
                 return None
 
             try:
-                string_val = wikidata_geolocation_to_text(parsed, self.lang)
+                string_val = wikibase_geolocation_to_text(parsed, self.lang)
             except (ValueError, TypeError, KeyError, requests.RequestException) as e:
                 if self.debug:
                     print(f"Warning: Failed to parse coordinates ({lat}, {lon}): {e}")
                 return None
 
-            return WikidataCoordinates(latitude=lat, longitude=lon, string_val=string_val)
+            return WikibaseCoordinates(latitude=lat, longitude=lon, string_val=string_val)
 
         # monolingualtext objects are represented as dicts in your parsing layer
         if isinstance(parsed, dict) and "text" in parsed:
             lang = parsed.get("language")
-            return WikidataMonolingualText(text=parsed.get("text"), lang=lang)
+            return WikibaseMonolingualText(text=parsed.get("text"), lang=lang)
 
-        return WikidataText(text=str(parsed))
+        return WikibaseText(text=str(parsed))
 
     # -------------------------------------------------------------------------
     # Main value extraction
