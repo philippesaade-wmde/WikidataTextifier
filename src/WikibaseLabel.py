@@ -368,18 +368,29 @@ class WikibaseLabel(Base):
         Args:
             data (dict): Label dictionary keyed by language.
             lang (str): Preferred language code.
-            fallback_lang (str | None): Optional fallback language code.
+            fallback_lang (str | None): Optional fallback language code. Use
+                ``"any"`` to select the first available language when the
+                requested language is unavailable.
 
         Returns:
             str: Selected label text, or an empty string when missing.
         """
-        label = data.get(lang, data.get("mul", {}))
-        if fallback_lang and not label:
-            label = data.get(fallback_lang, {})
+        if not isinstance(data, dict):
+            return ""
+
+        lang = lang.lower()
+        fallback_lang = fallback_lang.lower() if fallback_lang else None
+
+        label = data.get(lang) or data.get("mul")
+        if not label and fallback_lang:
+            if fallback_lang == "any":
+                label = next((data[key] for key in sorted(data) if data[key]), None)
+            else:
+                label = data.get(fallback_lang)
 
         if isinstance(label, str):
             return label
-        return label.get("value", "")
+        return label.get("value", "") if isinstance(label, dict) else ""
 
     @staticmethod
     def get_all_missing_labels_ids(data):
