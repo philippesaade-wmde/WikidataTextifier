@@ -30,6 +30,16 @@ def test_get_lang_val_falls_back_to_mul_and_fallback_language():
     assert WikibaseLabel.get_lang_val(labels_without_mul, lang="en", fallback_lang="fr") == "Etiquette"
 
 
+def test_get_lang_val_falls_back_to_any_available_language():
+    """It should select a stable available language with the wildcard fallback."""
+    labels = {
+        "de": {"value": "Etikett"},
+        "fr": {"value": "Etiquette"},
+    }
+
+    assert WikibaseLabel.get_lang_val(labels, lang="en", fallback_lang="any") == "Etikett"
+
+
 def test_get_all_missing_labels_ids_collects_nested_ids():
     """It should collect IDs from nested property, unit, claim, and datavalue branches."""
     payload = {

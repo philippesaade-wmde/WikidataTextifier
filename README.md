@@ -36,7 +36,7 @@ API Docs: [wd-textify.wmcloud.org/docs](https://wd-textify.wmcloud.org/docs)
 | `id` | string | Yes | Comma-separated entity IDs (for example: `Q42` or `Q42,Q2`). |
 | `pid` | string | No | Comma-separated property IDs to filter claims (for example: `P31,P279`). |
 | `lang` | string | No | Preferred language code (default: `en`). |
-| `fallback_lang` | string | No | Fallback language code (default: `en`). |
+| `fallback_lang` | string | No | Fallback language code (default: `en`). Use `any` to select the first available language when the requested language is unavailable. |
 | `format` | string | No | Output format: `json`, `text`, or `triplet` (default: `json`). |
 | `external_ids` | bool | No | Include `external-id` datatype claims (default: `true`). |
 | `all_ranks` | bool | No | Include all statement ranks instead of preferred/normal filtering (default: `false`). |

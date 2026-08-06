@@ -105,6 +105,7 @@ async def get_textified_wd(
     - **all_ranks** (bool): If `true`, include preferred, normal, and deprecated statement ranks.
     - **qualifiers** (bool): If `true`, include qualifiers for claim values.
     - **fallback_lang** (str): Fallback language used when `lang` is unavailable.
+      Use `any` to select a deterministic available language from the entity.
     - **action_api_url** (str): Action API URL
       (default: `https://www.wikidata.org/w/api.php`).
 
